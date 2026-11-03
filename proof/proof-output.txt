@@ -1,0 +1,107 @@
+=== 1. Linux side: monico-server start (port 8877) ===
+{"ok": true, "service": "monico-bridge", "version": "0.1.0", "uptime_s": 0}
+pairing key acquired (length 43)
+=== 2. Termux side (simulated shell): monico-connect ===
+{
+    "devices": [
+        {
+            "device_id": "linux",
+            "name": "htch-runtime",
+            "platform": "linux",
+            "online": true,
+            "role": "server (this machine)",
+            "hw": {
+                "platform": "linux",
+                "device_model": "",
+                "arch": "x86_64",
+                "cpu_cores": 4,
+                "ram_total_gb": 7.75,
+                "ram_available_gb": 0.65,
+                "disk_free_gb": 65.5,
+                "gpu": "none detected (CPU inference)",
+                "hostname": "htch-runtime"
+            },
+            "model": {
+                "installed": false
+            },
+            "hosted": [
+                "Monico Bridge homescreen",
+                "Bridge command channel"
+            ]
+        },
+        {
+            "device_id": "dev-d56f1a17",
+            "name": "termux-sim",
+            "platform": "linux",
+            "online": true,
+            "last_seen_s": 0,
+            "role": "Termux device server",
+            "hw": {
+                "platform": "linux",
+                "device_model": "",
+                "arch": "x86_64",
+                "cpu_cores": 4,
+                "ram_total_gb": 7.75,
+                "ram_available_gb": 0.7,
+                "disk_free_gb": 0.5,
+                "gpu": "none detected (CPU inference)",
+                "hostname": "htch-runtime"
+            },
+            "model": {
+                "installed": false
+            },
+            "hosted": [
+                "Device status page",
+                "Hosted files (~/monico-host)",
+                "Remote commands"
+            ]
+        }
+    ]
+}
+=== 3. Linux -> phone command ===
+PHONE_SIDE_OK
+Linux
+root
+exit=0
+=== 4. Phone -> Linux command ===
+LINUX_SIDE_OK
+htch-runtime
+exit=0
+=== 5. Homescreen (owner key) ===
+HTTP 200
+MONICO LABS
+12
+--- homescreen without key (must be login page) ---
+Owner access
+=== 6. Phone hosted service, proxied through the bridge ===
+device_id=dev-d56f1a17
+{
+    "device": "termux-sim",
+    "hw": {
+        "platform": "linux",
+        "device_model": "",
+        "arch": "x86_64",
+        "cpu_cores": 4,
+        "ram_total_gb": 7.75,
+        "ram_available_gb": 0.64,
+        "disk_free_gb": 0.5,
+        "gpu": "none detected (CPU inference)",
+        "hostname": "htch-runtime"
+    },
+    "model": {
+        "installed": false
+    },
+    "hosted_files": [
+        "hello.txt"
+    ]
+}
+hosted-on-the-phone proof file
+
+=== 7. Model installer dry runs (tier picks by hardware) ===
+[dry-run] nothing downloaded, nothing installed.
+galaxy-s22 -> Dolphin3.0-Qwen2.5-3B Q8_0 3.3 GB, budget 4.16 GB
+[dry-run] nothing downloaded, nothing installed.
+linux-32gb  -> Dolphin3.0-Qwen2.5-32B Q5_K_M 22.4 GB, budget 23.2 GB
+[dry-run] nothing downloaded, nothing installed.
+this VM     -> Dolphin3.0-Qwen2.5-0.5B Q4_K_M 0.4 GB | detected RAM total/avail GB: 7.75 0.67
+=== proof done ===

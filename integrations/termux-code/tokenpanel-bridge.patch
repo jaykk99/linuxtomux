@@ -1,0 +1,45 @@
+--- a/app/TokenPanel.jsx
++++ b/app/TokenPanel.jsx
+@@ -74,6 +74,16 @@
+     ? `pkg install nodejs git\ncurl -fsSL ${site}/install.sh | TERMUX_CODE_GATEWAY=${site} TERMUX_CODE_TOKEN=${token} bash\ntermux-code`
+     : null;
+ 
++  // Monico Labs bridge: the SAME owner token pairs the phone with the
++  // Linux bridge server. Set NEXT_PUBLIC_MONICO_SERVER to the bridge
++  // URL (e.g. http://<linux-host>:8765) to reveal the connect command
++  // next to the chat command. On the Linux side, accept this token
++  // once with: monico-server token-add <token>
++  const bridgeServer = process.env.NEXT_PUBLIC_MONICO_SERVER || '';
++  const bridgeCommand = token && bridgeServer
++    ? `pkg install python git\ncurl -fsSL ${bridgeServer}/install-termux.sh | MONICO_SERVER=${bridgeServer} MONICO_TOKEN=${token} bash\nmonico-connect`
++    : null;
++
+   return (
+     <div>
+       {existing?.length > 0 && !token && !revoked && (
+@@ -120,6 +130,25 @@
+           </p>
+         </>
+       )}
++      {bridgeCommand && (
++        <>
++          <h3>Monico Labs bridge (phone as a server)</h3>
++          <div className="install">
++            <code>{bridgeCommand}</code>
++          </div>
++          <div className="copyrow">
++            <button type="button" className="btn primary big" onClick={() => copy(bridgeCommand, 'bridge')}>
++              Copy the bridge command
++            </button>
++            {copied === 'bridge' && <span className="copied">Copied.</span>}
++          </div>
++          <p className="note">
++            Same token, second job: this pairs the phone with your Linux
++            bridge (monico-server). The phone connects out, becomes a
++            server, and shows up on the Monico Labs homescreen.
++          </p>
++        </>
++      )}
+     </div>
+   );
+ }

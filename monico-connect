@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+import sys
+from bridge.cli import connect_main
+if __name__ == "__main__":
+    sys.exit(connect_main(sys.argv[1:]))
