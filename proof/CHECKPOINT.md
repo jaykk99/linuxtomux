@@ -1,4 +1,18 @@
-# Build checkpoint (updated 2026-11-03 ~17:06 EST)
+# Build checkpoint (updated 2026-11-03 ~17:12 EST)
+
+## Update 17:12 EST
+- COMMITTED: git commit 030dafa on main (all code, tests, UI, docs,
+  proof log; models + tools-build gitignored).
+- GGUF download reached 397,811,008 / 413,316,096 bytes (96.2%), then
+  the egress proxy stalled completely (HF + GitHub + gh all timing
+  out). Only ~15.5 MB left; resume with the curl -C - command below
+  when egress returns. The stuck curl session was killed cleanly; the
+  partial file is intact and resumable.
+- llama.cpp: clone failed (CONNECT tunnel died), release-zip route
+  failed (redirect never resolved via proxy), GitHub API times out.
+  Runner install is egress-blocked, NOT code-blocked.
+- Push to GitHub: egress-blocked (gh auth status itself times out).
+  Repo is local-only at commit 030dafa until egress returns.
 
 ## Done and on disk
 - Repo scaffolded at ~/workspace/termux-linux-bridge/ (git init, branch main, NOT yet committed).
