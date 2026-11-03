@@ -6,6 +6,52 @@ puts the biggest uncensored model each device can run right on the
 device. Pure Python standard library on both ends: no pip installs, no
 builds, nothing to pay for, no keys to buy.
 
+## Install
+
+**Linux** (the server side; do this first, it hands you the pairing key):
+
+```sh
+git clone https://github.com/jaykk99/linuxtomux.git
+cd linuxtomux
+./install-linux.sh
+monico-server start
+```
+
+`install-linux.sh` copies the app to `~/.monico-bridge/app` and puts
+`monico-server`, `monico-cmd`, and `monico-model` in `~/.local/bin`
+(make sure that is on your PATH). `monico-server start` prints the
+pairing key once; the Termux install below needs it, plus this
+machine's address.
+
+**Termux** (the phone side):
+
+```sh
+pkg install python git
+git clone https://github.com/jaykk99/linuxtomux.git
+cd linuxtomux
+MONICO_SERVER=http://<linux-host>:8765 MONICO_TOKEN=<pairing key> ./install-termux.sh
+monico-connect
+```
+
+That puts `monico-connect`, `monico-cmd`, and `monico-model` in
+`$PREFIX/bin` and saves the server + pairing key to
+`~/.monico-bridge/client.json` (0600). Once the Linux server is already
+running, the shortcut is one line from the phone:
+
+```sh
+curl -fsSL http://<linux-host>:8765/install-termux.sh | MONICO_SERVER=http://<linux-host>:8765 MONICO_TOKEN=<pairing key> bash
+```
+
+(The shortcut re-downloads the app from GitHub, so the clone route
+above is the one that works fully offline of GitHub.)
+
+**The model, both sides** (optional, uncensored, biggest the device
+can run):
+
+```sh
+monico-model install
+```
+
 ## The two commands
 
 **On the Linux box:**

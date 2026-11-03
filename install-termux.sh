@@ -19,7 +19,7 @@ if [ -f "$SRC_DIR/monico-connect" ]; then
   cp -r "$SRC_DIR/bridge" "$SRC_DIR/ui" "$APP_DIR/"
   cp "$SRC_DIR"/monico-connect "$SRC_DIR"/monico-cmd "$SRC_DIR"/monico-model "$APP_DIR/"
 else
-  REPO="${MONICO_REPO:-https://github.com/jaykk99/termux-linux-bridge}"
+  REPO="${MONICO_REPO:-https://github.com/jaykk99/linuxtomux}"
   tmp="$(mktemp -d)"
   git clone --depth 1 "$REPO" "$tmp/repo"
   cp -r "$tmp/repo/bridge" "$tmp/repo/ui" "$APP_DIR/"
