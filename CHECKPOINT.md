@@ -51,4 +51,8 @@ device by name and relay across servers.
 - [x] README.md mesh section (+ layout/proof notes)
 - [x] Existing 5 unit tests pass (14 total with mesh); v1 proof
       run_proof.sh green end to end (PHONE_SIDE_OK/LINUX_SIDE_OK/200)
-- [ ] Push attempt (egress stalled; one bounded try, report honestly)
+- [x] Push attempt made 2026-11-03: `git push -u origin
+      feat/multi-device-mesh` timed out at 60s (VM egress stall).
+      All 5 commits are local on the branch; push still owed when
+      egress returns: same command, no rebase needed (base = local
+      main 646e3d8, which is origin/main + 1 local commit).
