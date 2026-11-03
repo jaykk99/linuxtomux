@@ -1,13 +1,15 @@
 """Command line entry points.
 
-Linux side:   monico-server start | token-add <token> | key
+Linux side:   monico-server start [--port N] [--join URL] [--key KEY]
+                                  [--name NAME] | token-add <token> | key
 Termux side:  monico-connect [--server URL] [--key KEY] [--name NAME]
-Both sides:   monico-cmd <linux|phone|device-name> <command...>
+Both sides:   monico-cmd <linux|phone|device-name|device-id> <command...>
               monico-model install [--device this|both] [--dry-run] [--profile NAME]
 """
 from __future__ import annotations
 
 import json
+import os
 import sys
 import urllib.request
 
@@ -27,8 +29,16 @@ def _post(url: str, key: str, payload: dict, timeout: int = 90) -> dict:
 
 
 def _bridge_endpoint() -> tuple[str, str]:
-    """Where monico-cmd should talk: my own server if I am the Linux
-    side (key file present), else the server saved by monico-connect."""
+    """Where monico-cmd should talk: MONICO_SERVER env if set (aim at
+    any mesh server), else my own server if I am the Linux side (key
+    file present), else the server saved by monico-connect."""
+    env_url = os.environ.get("MONICO_SERVER", "").strip()
+    if env_url:
+        saved = load_json(CLIENT_CONFIG)
+        key = os.environ.get("MONICO_TOKEN", "").strip() or saved.get("key", "")
+        if not key and KEY_FILE.exists():
+            key, _ = get_or_create_key()
+        return env_url, key
     saved = load_json(CLIENT_CONFIG)
     if KEY_FILE.exists() and not saved.get("server_url"):
         key, _ = get_or_create_key()
@@ -39,26 +49,54 @@ def _bridge_endpoint() -> tuple[str, str]:
     return f"http://127.0.0.1:{DEFAULT_PORT}", key
 
 
+def resolve_from_list(devices: list[dict], name: str) -> str:
+    """Resolve a target name against a device list (local + mesh).
+
+    "linux"/"server"/"this" mean the server monico-cmd is talking to.
+    Otherwise an exact device_id wins, then a unique device name (if a
+    name is shared, the one online device wins; still tied is an error
+    that lists the ids). "phone" is a shortcut for the first online
+    Android device; with several phones, target by name or id."""
+    if name in ("linux", "server", "this"):
+        return "linux"
+    for dev in devices:
+        if dev.get("device_id") == name:
+            return dev["device_id"]
+    named = [d for d in devices if d.get("name") == name]
+    if len(named) == 1:
+        return named[0]["device_id"]
+    if len(named) > 1:
+        online = [d for d in named if d.get("online")]
+        if len(online) == 1:
+            return online[0]["device_id"]
+        ids = ", ".join(d["device_id"] for d in named)
+        raise SystemExit(f"{name!r} matches {len(named)} devices ({ids}); "
+                         f"target one by device id instead")
+    if name == "phone":
+        phones = [d for d in devices
+                  if str(d.get("platform", "")).startswith("android")]
+        online = [d for d in phones if d.get("online")]
+        pick = online or phones
+        if pick:
+            return pick[0]["device_id"]
+    raise SystemExit(f"no connected device matches {name!r}; "
+                     f"online: {[d['name'] for d in devices]}")
+
+
 def _resolve_target(name: str) -> str:
-    if name in ("linux", "server"):
+    if name in ("linux", "server", "this"):
         return "linux"
     base, key = _bridge_endpoint()
     req = urllib.request.Request(base + "/api/devices",
                                  headers={"X-Pair-Key": key})
     with urllib.request.urlopen(req, timeout=15) as resp:
         devices = json.loads(resp.read())["devices"]
-    for dev in devices:
-        if (name in (dev["device_id"], dev["name"])
-                or (name == "phone" and dev["platform"].startswith("android"))
-                or (name == "phone" and dev["device_id"] != "linux")):
-            return dev["device_id"]
-    raise SystemExit(f"no connected device matches {name!r}; "
-                     f"online: {[d['name'] for d in devices]}")
+    return resolve_from_list(devices, name)
 
 
 def cmd_main(argv: list[str]) -> int:
     if len(argv) < 2:
-        print("usage: monico-cmd <linux|phone|device-name> <command...>")
+        print("usage: monico-cmd <linux|phone|device-name|device-id> <command...>")
         return 2
     target_name, command = argv[0], " ".join(argv[1:])
     base, key = _bridge_endpoint()
@@ -122,10 +160,11 @@ def model_main(argv: list[str]) -> int:
 def server_main(argv: list[str]) -> int:
     from . import server as srv
     if not argv or argv[0] == "start":
-        port = DEFAULT_PORT
-        if "--port" in argv:
-            port = int(argv[argv.index("--port") + 1])
-        srv.serve(port)
+        def opt(flag: str) -> str | None:
+            return argv[argv.index(flag) + 1] if flag in argv else None
+        port = int(opt("--port") or DEFAULT_PORT)
+        srv.serve(port, join_url=opt("--join"), join_key=opt("--key"),
+                  name=opt("--name"))
         return 0
     if argv[0] == "key":
         key, is_new = get_or_create_key()
@@ -134,7 +173,8 @@ def server_main(argv: list[str]) -> int:
     if argv[0] == "token-add" and len(argv) == 2:
         srv.token_add(argv[1])
         return 0
-    print("usage: monico-server start [--port N] | key | token-add <token>")
+    print("usage: monico-server start [--port N] [--join URL] [--key KEY] "
+          "[--name NAME] | key | token-add <token>")
     return 2
 
 

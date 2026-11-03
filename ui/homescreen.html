@@ -51,11 +51,11 @@ async function load(){
     <div class="tile">
       <span class="dot ${d.online?"on":"off"}"></span> <span class="meta">${d.online?"online":"offline"}</span>
       <div class="name">${esc(d.name)}</div>
-      <div class="meta">${esc(d.role||"")}<br>${esc(hwLine(d.hw))}</div>
+      <div class="meta">${esc(d.role||"")}${d.via?`<br>via ${esc(d.via)}`:""}<br>${esc(hwLine(d.hw))}</div>
     </div>`).join("");
   document.getElementById("hosted").innerHTML = devs.flatMap(d=>{
     const items = d.hosted || [];
-    const link = d.device_id==="linux" ? "" : `/device/${d.device_id}/hosted/`;
+    const link = d.self ? "" : `/device/${d.device_id}/hosted/`;
     return items.map(h=>`<a class="tile" href="${link||"#"}">
       <div class="big">&#128230;</div><div class="name" style="font-size:16px">${esc(h)}</div>
       <div class="meta">on ${esc(d.name)}</div></a>`);

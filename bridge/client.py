@@ -106,7 +106,7 @@ class Client:
         save_json(CLIENT_CONFIG, {"server_url": self.server, "key": self.key,
                                   "name": self.name, "device_id": self.device_id})
         info = {"device_id": self.device_id, "name": self.name,
-                "platform": self.hw["platform"], "hw": self.hw,
+                "platform": self.hw["platform"], "kind": "device", "hw": self.hw,
                 "model": model_status(),
                 "services": ["Device status page", "Hosted files (~/monico-host)",
                              "Remote commands"]}
