@@ -1,18 +1,26 @@
-# Build checkpoint (updated 2026-11-03 ~17:12 EST)
+# Build checkpoint (updated 2026-11-03 ~17:20 EST)
+
+## CORRECTION 17:20 EST (supersedes the 17:12 note on the GGUF)
+- The GGUF download is COMPLETE and verified, not 96.2%. The depth-2
+  download worker's curl exited 0 at 397,811,008 bytes; the
+  413,316,096 "total" in the first worker's dl.log was a bad
+  denominator from a resumed-range progress line.
+- Verified three ways: (1) curl exit 0, HTTP 200; (2) SHA256
+  6a53689e2cb91027fdc9e366142eba8e35f56c14ee353e0a4d64de981efbfffa,
+  identical across independent reads; (3) GGUF structure parse:
+  version 3, 290 tensors, 79 metadata KV, 494,032,768 params (exactly
+  Qwen2.5-0.5B), computed tensor span 397,794,528 vs actual
+  397,811,008 (16,480 bytes = padding/table rounding, 0.004%).
+- Still blocked: llama-cli runner (GitHub egress) and the GitHub push
+  (gh times out). Both are egress-only, retry in small increments.
 
 ## Update 17:12 EST
 - COMMITTED: git commit 030dafa on main (all code, tests, UI, docs,
   proof log; models + tools-build gitignored).
-- GGUF download reached 397,811,008 / 413,316,096 bytes (96.2%), then
-  the egress proxy stalled completely (HF + GitHub + gh all timing
-  out). Only ~15.5 MB left; resume with the curl -C - command below
-  when egress returns. The stuck curl session was killed cleanly; the
-  partial file is intact and resumable.
-- llama.cpp: clone failed (CONNECT tunnel died), release-zip route
-  failed (redirect never resolved via proxy), GitHub API times out.
-  Runner install is egress-blocked, NOT code-blocked.
-- Push to GitHub: egress-blocked (gh auth status itself times out).
-  Repo is local-only at commit 030dafa until egress returns.
+- GGUF download reached 397,811,008 bytes, then the egress proxy
+  stalled (HF + GitHub + gh timing out in that window). The stuck
+  curl session was killed cleanly; the partial file was intact and
+  the parallel worker's download completed it (see CORRECTION).
 
 ## Done and on disk
 - Repo scaffolded at ~/workspace/termux-linux-bridge/ (git init, branch main, NOT yet committed).
