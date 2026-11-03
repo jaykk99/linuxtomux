@@ -55,8 +55,10 @@ def resolve_from_list(devices: list[dict], name: str) -> str:
     "linux"/"server"/"this" mean the server monico-cmd is talking to.
     Otherwise an exact device_id wins, then a unique device name (if a
     name is shared, the one online device wins; still tied is an error
-    that lists the ids). "phone" is a shortcut for the first online
-    Android device; with several phones, target by name or id."""
+    that lists the ids). "phone" is a shortcut for a client device:
+    Android devices first, then any device that joined as a client;
+    it never matches a mesh server. With several phones, target by
+    name or id."""
     if name in ("linux", "server", "this"):
         return "linux"
     for dev in devices:
@@ -73,10 +75,12 @@ def resolve_from_list(devices: list[dict], name: str) -> str:
         raise SystemExit(f"{name!r} matches {len(named)} devices ({ids}); "
                          f"target one by device id instead")
     if name == "phone":
-        phones = [d for d in devices
-                  if str(d.get("platform", "")).startswith("android")]
-        online = [d for d in phones if d.get("online")]
-        pick = online or phones
+        clients = [d for d in devices if d.get("kind") != "server"]
+        android = [d for d in clients
+                   if str(d.get("platform", "")).startswith("android")]
+        pool = android or clients
+        online = [d for d in pool if d.get("online")]
+        pick = online or pool
         if pick:
             return pick[0]["device_id"]
     raise SystemExit(f"no connected device matches {name!r}; "

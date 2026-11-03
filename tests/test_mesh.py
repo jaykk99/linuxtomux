@@ -136,24 +136,38 @@ def test_local_and_self_submit_still_work():
     assert "unknown device" in res["error"]
 
 
-def _dev(did, name, platform, online=True):
+def _dev(did, name, platform, online=True, kind="device"):
     return {"device_id": did, "name": name, "platform": platform,
-            "online": online}
+            "online": online, "kind": kind}
 
 
 def test_name_resolution():
-    devs = [_dev("srv-aaaa", "linux-a", "linux"),
-            _dev("srv-bbbb", "linux-b", "linux"),
+    devs = [_dev("srv-aaaa", "linux-a", "linux", kind="server"),
+            _dev("srv-bbbb", "linux-b", "linux", kind="server"),
             _dev("dev-t1", "termux-t1", "android-termux"),
             _dev("dev-t2", "termux-t2", "android-termux")]
     assert resolve_from_list(devs, "linux") == "linux"
     assert resolve_from_list(devs, "dev-t2") == "dev-t2"
     assert resolve_from_list(devs, "termux-t1") == "dev-t1"
     assert resolve_from_list(devs, "linux-b") == "srv-bbbb"
-    # "phone" = an Android device, never a Linux server (v1 bug).
+    # "phone" = a client device, never a mesh server (v1 bug).
     assert resolve_from_list(devs, "phone") in ("dev-t1", "dev-t2")
     try:
         resolve_from_list(devs, "nope")
+        raise AssertionError("expected SystemExit")
+    except SystemExit:
+        pass
+
+
+def test_phone_shortcut_skips_servers_and_finds_linux_clients():
+    # Only servers + one Linux box that joined purely as a client:
+    # "phone" must land on the client, never on a server.
+    devs = [_dev("srv-aaaa", "linux-a", "linux", kind="server"),
+            _dev("srv-bbbb", "linux-b", "linux", kind="server"),
+            _dev("dev-l1", "linux-client", "linux", kind="device")]
+    assert resolve_from_list(devs, "phone") == "dev-l1"
+    try:
+        resolve_from_list(devs[:2], "phone")
         raise AssertionError("expected SystemExit")
     except SystemExit:
         pass
