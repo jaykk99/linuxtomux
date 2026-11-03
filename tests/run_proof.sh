@@ -59,7 +59,7 @@ echo "--- homescreen without key (must be login page) ---"
 curl -s "$BASE/" | grep -o "Owner access" | head -1
 
 echo "=== 6. Phone hosted service, proxied through the bridge ==="
-DEVID=$(curl -s -H "X-Pair-Key: $KEY" "$BASE/api/devices" | python3 -c "import json,sys; print([d['device_id'] for d in json.load(sys.stdin)['devices'] if d['device_id']!='linux'][0])")
+DEVID=$(curl -s -H "X-Pair-Key: $KEY" "$BASE/api/devices" | python3 -c "import json,sys; print([d['device_id'] for d in json.load(sys.stdin)['devices'] if d['name']=='termux-sim'][0])")
 echo "device_id=$DEVID"
 curl -s -H "X-Pair-Key: $KEY" "$BASE/device/$DEVID/hosted/status.json" | python3 -m json.tool | head -20
 curl -s -H "X-Pair-Key: $KEY" "$BASE/device/$DEVID/hosted/files/hello.txt"; echo
