@@ -50,6 +50,24 @@ def get_or_create_key() -> tuple[str, bool]:
     return key, True
 
 
+SERVER_FILE = DATA_DIR / "server.json"
+
+
+def get_or_create_server_id() -> str:
+    """Persistent unique id for THIS server (mesh identity).
+
+    Every Linux server in a mesh needs its own device id so several can
+    appear in one shared device list and be targeted individually.
+    Stored apart from the pairing key; not a secret.
+    """
+    cfg = load_json(SERVER_FILE)
+    sid = cfg.get("server_id", "")
+    if not sid.startswith("srv-"):
+        sid = "srv-" + secrets.token_hex(4)
+        save_json(SERVER_FILE, {"server_id": sid})
+    return sid
+
+
 def accepted_tokens() -> set[str]:
     """Pairing key + any extra owner tokens (e.g. a termux-code tc_v1
     gateway token Jay adds with `monico-server token-add`)."""
