@@ -79,7 +79,16 @@
   tests/run_proof.sh full E2E re-ran clean (exit 0, proof-output.txt
   regenerated: round trip both ways, homescreen 200 + tiles, phone
   hosted files through the bridge, 3 tier dry runs).
-- REPORT.md written at repo root. Final commit + push attempt next.
+- REPORT.md written at repo root. Finish commit dce44cd (REPORT.md,
+  this checkpoint, re-run proof log, install-home/model.json, plus a
+  .gitignore line for proof/install-home/models/ so the GGUF can never
+  be swept into git). Working tree clean.
+- PUSH ATTEMPT 2026-11-03 ~18:00 EST: FAILED. `gh repo create
+  jaykk99/termux-linux-bridge --private --source . --push` died with
+  `Get "https://api.github.com/users/jaykk99": unexpected EOF`; no
+  remote was set. Direct `git ls-remote` of the repo URL timed out at
+  45s with no output. Nothing pushed, nothing claimed. Owed commands
+  are in REPORT.md ("Push state" section).
 
 ## Remaining increments
 1. Poll GGUF download; verify size + GGUF magic.
