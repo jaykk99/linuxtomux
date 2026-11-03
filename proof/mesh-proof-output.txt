@@ -1,0 +1,56 @@
+=== 1. Server A: monico-server start --name linux-a (port 8911) ===
+{"ok": true, "service": "monico-bridge", "version": "0.1.0", "server_id": "srv-b21b5420", "name": "linux-a", "uptime_s": 0}
+pairing key acquired (length 43)
+=== 2. Server B: monico-server start --name linux-b --join A (port 8912) ===
+PASS: B registered + online on A
+PASS: B sees A (sync flowed back)
+=== 3. Simulated Termux clients: T1 -> A, T2 -> B ===
+PASS: T1 online on A
+PASS: T2 (on B) visible + online on A
+PASS: T1 (on A) visible + online on B
+=== 4. (a) Shared device list: homescreen data on A and on B ===
+--- A /api/devices ---
+  linux-a      linux           online=True  via=-        id=srv-b21b5420
+  linux-b      linux           online=True  via=-        id=srv-120bac50
+  termux-t1    linux           online=True  via=-        id=dev-612daa79
+  termux-t2    linux           online=True  via=linux-b  id=dev-6e7bb2b1
+--- B /api/devices ---
+  linux-b      linux           online=True  via=-        id=srv-120bac50
+  termux-t2    linux           online=True  via=-        id=dev-6e7bb2b1
+  linux-a      linux           online=True  via=linux-a  id=srv-b21b5420
+  termux-t1    linux           online=True  via=linux-a  id=dev-612daa79
+device count: A=4 B=4 (expect 4 and 4)
+PASS: both servers list exactly the 4 mesh nodes
+homescreen on A: HTTP 200, banner: MONICO LABS
+PASS: homescreen loads on A
+=== 5. (b) Command issued ON T1 executes ON T2 (cross-server relay) ===
+RELAY_T1_TO_T2_OK
+ran in env MONICO_HOME=/tmp/mesh-t2home/.monico-bridge
+exit=0 (marker env must be T2's: /tmp/mesh-t2home/.monico-bridge)
+=== 6. (c) Commands from server A execute on T2 and on B ===
+A_TO_T2_OK
+ran in env MONICO_HOME=/tmp/mesh-t2home/.monico-bridge
+exit=0
+ON_LINUX_B_OK
+ran in env MONICO_HOME=/tmp/mesh-b
+exit=0 (marker env must be B's: /tmp/mesh-b)
+=== 7. (d) Kill B: T2 + B go offline on A, A keeps working ===
+PASS: T2 marked offline on A after B died
+PASS: linux-b marked offline on A
+--- A /api/devices after B died ---
+  linux-a      linux           online=True  via=-        id=srv-b21b5420
+  linux-b      linux           online=False via=-        id=srv-120bac50
+  termux-t1    linux           online=True  via=-        id=dev-612daa79
+  termux-t2    linux           online=False via=linux-b  id=dev-6e7bb2b1
+A_STILL_OK
+PASS: A still executes local commands
+PASS: A health endpoint still answers
+=== 8. (e) Restart B (no --key: adopted key persisted): mesh heals ===
+PASS: linux-b back online on A
+PASS: T2 back online on A (rejoin heals)
+--- A /api/devices after rejoin ---
+  linux-a      linux           online=True  via=-        id=srv-b21b5420
+  linux-b      linux           online=True  via=-        id=srv-120bac50
+  termux-t1    linux           online=True  via=-        id=dev-612daa79
+  termux-t2    linux           online=True  via=linux-b  id=dev-6e7bb2b1
+=== mesh proof done: 0 failure(s) ===

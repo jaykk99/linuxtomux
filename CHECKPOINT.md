@@ -34,16 +34,21 @@ device by name and relay across servers.
 ## Progress
 
 - [x] Worktree/base verified (646e3d8), v1 code read, design above.
-- [ ] common.py: get_or_create_server_id()
-- [ ] server.py: mesh registry (snapshot/known/apply_sync), relay in
+- [x] common.py: get_or_create_server_id() (636b625)
+- [x] server.py: mesh registry (snapshot/known/apply_sync), relay in
       submit(), /bridge/peer-sync, PeerLink thread, serve(--join)
-- [ ] cli.py: --join/--key/--name flags, resolve_from_list(), env
-      endpoint override
-- [ ] client.py: register kind="device"; homescreen: d.self link fix
-- [ ] tests/test_mesh.py: sync merge, relay routing, name resolution
-- [ ] tests/run_mesh_proof.sh + proof/mesh-proof-output.txt
-      (A + B joined, T1 on A, T2 on B; homescreen lists 4; T1->T2
-      relay; A->T2; kill B -> T2 offline on A, A healthy; B rejoin)
-- [ ] README.md mesh section
-- [ ] Existing 5 unit tests + v1 proof still pass
+- [x] cli.py: --join/--key/--name flags, resolve_from_list(), env
+      endpoint override (27bc6bb)
+- [x] client.py: register kind="device"; homescreen: d.self link fix
+- [x] tests/test_mesh.py: sync merge, relay routing, name resolution
+      (9 tests; one real bug found + fixed by the v1 proof: 'phone'
+      shortcut must match client devices incl. linux-platform ones,
+      never servers)
+- [x] tests/run_mesh_proof.sh + proof/mesh-proof-output.txt:
+      14/14 PASS, 0 failures (A + B joined, T1 on A, T2 on B; both
+      list 4; T1->T2 relay with env markers; A->T2; A->linux-b; kill
+      B -> T2 + B offline on A, A healthy; rejoin heals)
+- [x] README.md mesh section (+ layout/proof notes)
+- [x] Existing 5 unit tests pass (14 total with mesh); v1 proof
+      run_proof.sh green end to end (PHONE_SIDE_OK/LINUX_SIDE_OK/200)
 - [ ] Push attempt (egress stalled; one bounded try, report honestly)

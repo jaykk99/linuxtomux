@@ -112,6 +112,65 @@ guard (adapted from linux-remote) blocks fat-finger disasters like
 on both devices: treat it like the linux-remote API key, because it is
 the same pattern and the same stakes.
 
+## Mesh: many devices, many servers
+
+One server was never the limit. Any mix of devices joins one mesh:
+several phones on one Linux box, several Linux boxes federated
+together, or everything at once.
+
+**More phones on one server** needs nothing new: each phone runs
+`monico-connect` with its own name and shows up on the homescreen,
+targetable on its own:
+
+```sh
+# phone 1 and phone 2, same server
+monico-connect --name pixel-8
+monico-connect --name galaxy-s22
+monico-cmd galaxy-s22 'termux-battery-status'
+```
+
+**More Linux boxes**: start the second server with `--join` pointing
+at the first (same pairing key everywhere; pass it once with `--key`
+and that box adopts it as its own):
+
+```sh
+# on linux-b, joining the server already running on linux-a
+monico-server start --name linux-b --join http://<linux-a>:8765 --key <pairing key>
+```
+
+From that moment both servers carry the SAME device list: their own
+devices plus each other's. A command for a device on the far server is
+relayed through that server and the result comes back the same way,
+so `monico-cmd <device-name> '<command>'` works from anywhere in the
+mesh:
+
+```sh
+# run from linux-a, executes on the phone that is connected to linux-b
+monico-cmd galaxy-s22 'uname -a'
+```
+
+Two mixes, same commands:
+
+```sh
+# 2 Termux + 1 Linux: both phones monico-connect to the one server
+# 4 Linux + 4 Termux: linux-b/c/d each start with --join pointing at
+# any server already in the mesh; each phone connects to its nearest
+# server; every server sees all 8 devices by name
+```
+
+Targeting rules: a device id always works; a device name works when
+it is unique (if two devices share a name, `monico-cmd` says so and
+lists their ids); `linux` means the server you are talking to;
+`phone` is a shortcut for a connected phone when there is just one
+you mean. Give each device a distinct `--name` and targeting stays
+one word.
+
+If a server goes down, its devices show as offline on the others and
+everything local keeps working; when it starts again with the same
+`--join`, the lists sync back up on their own. A Linux box that only
+needs to BE a device (no homescreen of its own) can skip the server
+entirely and just run `monico-connect` against any mesh server.
+
 ## Homescreen (Monico Labs hosting)
 
 Open `http://<linux-host>:8765/` and enter the pairing key once (it is
@@ -181,13 +240,13 @@ live gate is a separate step.
 
 ```
 monico-server / monico-connect / monico-cmd / monico-model   commands
-bridge/server.py     Linux side: registry, command channel, homescreen
+bridge/server.py     Linux side: registry, mesh sync, relay, homescreen
 bridge/client.py     Termux side: channel + the phone's hosted service
 bridge/cli.py        command-line entry points
 bridge/model_installer.py + hwdetect.py   hardware tiers, installer
 ui/homescreen.html   the Monico Labs homescreen
 install-linux.sh / install-termux.sh
-tests/               unit tests + run_proof.sh end-to-end proof
+tests/               unit tests + run_proof.sh + run_mesh_proof.sh proofs
 integrations/termux-code/
 ```
 
@@ -200,3 +259,13 @@ homescreen, pulls the phone's hosted status + a hosted file through
 the bridge, and prints model tier picks for a Galaxy S22 profile, a
 32 GB Linux profile, and this machine. Output: `proof/proof-output.txt`.
 Unit tests: `python3 tests/test_bridge.py`.
+
+`tests/run_mesh_proof.sh` proves the mesh: two servers (the second
+started with `--join`) plus two simulated clients, one per server.
+It shows both servers listing all 4 nodes, a command issued on one
+client executing on the other across the relay, commands from a
+server reaching the far client and the far server itself, the far
+side ageing to offline when a server is killed (with the survivor
+still working), and the mesh healing when it rejoins. Output:
+`proof/mesh-proof-output.txt`. Mesh unit tests:
+`python3 tests/test_mesh.py`.
