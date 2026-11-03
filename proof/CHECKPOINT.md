@@ -57,6 +57,30 @@
   llama-cli -j2 (cmake/make/g++ present). If both fail, smoke test is
   blocked on egress; installer still HEAD/download-proven by GGUF.
 
+## Finish pass 2026-11-03 ~17:55 EST (parent follow-up agent)
+- Route (a) tools-build/pypi: EMPTY directory, nothing usable. No local
+  llama binary/module anywhere (no llama-cli in PATH, no llama_cpp
+  module, nothing under ~/workspace/tools).
+- Route (b) pip install llama-cpp-python (target tools-build/pylib,
+  --timeout 20 --retries 1): FAILED, pypi.org read timeout, "No matching
+  distribution found" (index unreachable through the stalled proxy).
+- Route (c) GitHub release zip: FAILED at the resolve step,
+  releases/latest returned 000 (curl exit 28, 30s timeout). Same proxy
+  stall that killed the zip twice before; asset tag not even resolvable.
+- Route (d) git clone --depth 1 llama.cpp: FAILED, clone hung through
+  the proxy and was killed at a 60s timeout, no source landed (same
+  "Proxy CONNECT aborted" family as the earlier clone.log).
+- CONCLUSION: no runner obtainable while the VM egress stall lasts.
+  Smoke test stays honestly NOT RUN; model.json smoke field left in its
+  current truthful state ("no llama.cpp runner on this device yet").
+  The GGUF itself is downloaded, SHA256-verified and GGUF-parsed, and
+  the installer run is proven; only inference is egress-blocked.
+- Re-ran tests 2026-11-03 ~17:58 EST: tests/test_bridge.py 5/5 PASS;
+  tests/run_proof.sh full E2E re-ran clean (exit 0, proof-output.txt
+  regenerated: round trip both ways, homescreen 200 + tiles, phone
+  hosted files through the bridge, 3 tier dry runs).
+- REPORT.md written at repo root. Final commit + push attempt next.
+
 ## Remaining increments
 1. Poll GGUF download; verify size + GGUF magic.
 2. Check tools-build/release.log; unzip llama-bin.zip if landed, find llama-cli.

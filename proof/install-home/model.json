@@ -1,0 +1,14 @@
+{
+  "model": "Dolphin3.0-Qwen2.5-0.5B",
+  "repo": "bartowski/Dolphin3.0-Qwen2.5-0.5B-GGUF",
+  "quant": "Q4_K_M",
+  "file": "/home/hatch/workspace/termux-linux-bridge/proof/install-home/models/Dolphin3.0-Qwen2.5-0.5B-Q4_K_M.gguf",
+  "size_gb": 0.4,
+  "installed_at": "2026-11-03T22:13:35",
+  "device": "htch-runtime",
+  "runner": "not installed yet",
+  "smoke": {
+    "ok": false,
+    "error": "no llama.cpp runner on this device yet (build note in README); model file is installed"
+  }
+}

@@ -16,8 +16,8 @@ pairing key acquired (length 43)
                 "arch": "x86_64",
                 "cpu_cores": 4,
                 "ram_total_gb": 7.75,
-                "ram_available_gb": 0.65,
-                "disk_free_gb": 65.5,
+                "ram_available_gb": 0.69,
+                "disk_free_gb": 65.1,
                 "gpu": "none detected (CPU inference)",
                 "hostname": "htch-runtime"
             },
@@ -30,7 +30,7 @@ pairing key acquired (length 43)
             ]
         },
         {
-            "device_id": "dev-d56f1a17",
+            "device_id": "dev-6d7abc24",
             "name": "termux-sim",
             "platform": "linux",
             "online": true,
@@ -42,7 +42,7 @@ pairing key acquired (length 43)
                 "arch": "x86_64",
                 "cpu_cores": 4,
                 "ram_total_gb": 7.75,
-                "ram_available_gb": 0.7,
+                "ram_available_gb": 0.64,
                 "disk_free_gb": 0.5,
                 "gpu": "none detected (CPU inference)",
                 "hostname": "htch-runtime"
@@ -74,7 +74,7 @@ MONICO LABS
 --- homescreen without key (must be login page) ---
 Owner access
 === 6. Phone hosted service, proxied through the bridge ===
-device_id=dev-d56f1a17
+device_id=dev-6d7abc24
 {
     "device": "termux-sim",
     "hw": {
@@ -83,7 +83,7 @@ device_id=dev-d56f1a17
         "arch": "x86_64",
         "cpu_cores": 4,
         "ram_total_gb": 7.75,
-        "ram_available_gb": 0.64,
+        "ram_available_gb": 0.69,
         "disk_free_gb": 0.5,
         "gpu": "none detected (CPU inference)",
         "hostname": "htch-runtime"
@@ -103,5 +103,5 @@ galaxy-s22 -> Dolphin3.0-Qwen2.5-3B Q8_0 3.3 GB, budget 4.16 GB
 [dry-run] nothing downloaded, nothing installed.
 linux-32gb  -> Dolphin3.0-Qwen2.5-32B Q5_K_M 22.4 GB, budget 23.2 GB
 [dry-run] nothing downloaded, nothing installed.
-this VM     -> Dolphin3.0-Qwen2.5-0.5B Q4_K_M 0.4 GB | detected RAM total/avail GB: 7.75 0.67
+this VM     -> Dolphin3.0-Qwen2.5-0.5B Q4_K_M 0.4 GB | detected RAM total/avail GB: 7.75 0.62
 === proof done ===
