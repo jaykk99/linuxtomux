@@ -155,6 +155,71 @@ git push -u origin main
 git ls-remote origin   # verify before claiming the push landed
 ```
 
+## Monico Labs storefront on the homescreen (2026-11-04)
+
+Jay's order: "Get Monico Labs on the Linux to termux control thing."
+The Monico Labs storefront (live at
+https://monico-labs-insta.onrender.com) is now a hosted-app entry on
+the bridge homescreen, next to the device tiles, on every server in
+the mesh (apps are web properties, not devices, so the entry is the
+same mesh-wide and the phone sees the same homescreen).
+
+What was added:
+
+- `bridge/apps.py` — the app registry plus a server-side status
+  probe. One entry: Monico Labs -> the storefront URL, blurb, and
+  content markers ("Monico Agent", "ReconAnything"). Probe results
+  are cached 45s, so homescreen loads (20s poll) do not hammer the
+  site.
+- Probe classification follows the house rule that a 200 is not
+  "works": UP only on HTTP 200 WITH the markers in what the server
+  delivers; 200 without markers = BLANK with the reason; HTTP error
+  or failed fetch = DOWN with the reason. Because the storefront is
+  a client-rendered app (its HTML shell is 1.2 KB and the product
+  names live in its JS bundle), a shell that lacks the markers gets
+  its bundle(s) checked before anything is called blank; markers in
+  the bundle = UP with that stated in the reason. First live probe
+  proved why this matters both ways: the raw shell alone classified
+  BLANK, and the bundle check found all four product names in the
+  live 266 KB bundle.
+- `GET /api/apps` on the server, behind the same owner key as
+  `/api/devices` (401 without it, login page at `/` unchanged).
+- Homescreen: an "Apps" section between the device tiles and
+  "Hosted here". A tile per app: live status dot, name, blurb, and a
+  link that opens the storefront; when not UP, the tile shows the
+  probe's reason instead of a link pitch.
+
+Tests (all run 2026-11-04 on this branch):
+
+- Unit: 24/24 PASS — 14 pre-existing (5 bridge + 9 mesh, unchanged)
+  plus 10 new in `tests/test_apps.py`: registry contents, probe
+  UP / BLANK / DOWN-on-HTTP-error / DOWN-on-fetch-error, SPA-shell
+  UP via bundle, BLANK when the bundle also lacks markers, bundle
+  URL extraction, probe caching (1 fetch inside the TTL, refetch
+  after it), and the `/api/apps` endpoint (401 without the key, the
+  Monico Labs entry with a live classification with it, probe fetch
+  faked so tests never touch the network).
+- E2E proof (`tests/run_proof.sh`): exit 0, full pass re-run; the
+  homescreen now shows 16 tile-marker lines (was 12) with the Apps
+  section.
+- Mesh proof (`tests/run_mesh_proof.sh`): exit 0, 0 failures, all
+  13 checks PASS and all 3 cross-server relay markers present.
+
+Live proof (worktree server on :8891, scratch MONICO_HOME, real
+storefront): `GET /api/apps` returned the Monico Labs entry with
+status "up" and the reason "HTTP 200; markers are not in the HTML
+shell (client-rendered app) but are present in its JS bundle";
+the authenticated homescreen served HTTP 200 with the Apps grid;
+no-key requests still got 401 / the owner login page. Captured
+evidence (api-apps.json, homescreen.html, rendered tile) is in
+~/workspace/bridge-monico-labs-2026-11-04/.
+
+Honest limits: the probe verifies what the server delivers (HTML +
+bundle content). It cannot prove the page mounts in a browser; a
+runtime JS crash on the client would still classify UP. Catching
+that class needs a headless browser, which is outside this repo's
+stdlib-only rule.
+
 ## Still needs Jay
 
 1. **Real-phone test:** run the Termux connect command above on the

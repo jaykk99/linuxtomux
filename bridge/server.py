@@ -30,6 +30,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
+from .apps import APPS, AppProbe
 from .common import (DATA_DIR, KEY_FILE, VERSION, check_token,
                      ensure_data_dir, get_or_create_key,
                      get_or_create_server_id, log, model_status,
@@ -65,6 +66,7 @@ class Bridge:
         self.lock = threading.Lock()
         self.started = time.time()
         self.port: int | None = None
+        self.app_probe = AppProbe()
 
     # -- device registry -------------------------------------------------
     def register(self, info: dict) -> dict:
@@ -149,6 +151,12 @@ class Bridge:
 
     def device_list(self) -> list[dict]:
         return self.known()
+
+    def app_list(self) -> list[dict]:
+        """Hosted-app entries for the homescreen, each with a live
+        (briefly cached) probe status. Apps are the same on every
+        server in the mesh: they are web properties, not devices."""
+        return self.app_probe.statuses(APPS)
 
     def apply_sync(self, via_id: str, via_name: str, records: list[dict]) -> list[dict]:
         """Store a peer's full device list as claims, keyed by the
@@ -434,6 +442,8 @@ def make_handler():
                 return self._send(200, html.encode(), "text/html; charset=utf-8")
             if p == "/api/devices":
                 return self._json(200, {"devices": BRIDGE.device_list()})
+            if p == "/api/apps":
+                return self._json(200, {"apps": BRIDGE.app_list()})
             if p.startswith("/device/"):
                 # /device/<id>/hosted/<path> -> proxied to the device's own service
                 parts = p.split("/", 4)

@@ -32,6 +32,9 @@
   <h2>Connected devices</h2>
   <div class="grid" id="devices"><div class="tile"><div class="meta">Loading devices...</div></div></div>
 
+  <h2>Apps</h2>
+  <div class="grid" id="apps"><div class="tile"><div class="meta">Loading apps...</div></div></div>
+
   <h2>Hosted here</h2>
   <div class="grid" id="hosted"><div class="tile"><div class="meta">Loading...</div></div></div>
 
@@ -69,6 +72,18 @@ async function load(){
       <div class="name" style="font-size:16px">${esc(m.model||"model")}</div>
       <div class="meta">on ${esc(d.name)}<br>${esc(m.quant||"")} - ${esc(m.size_gb||"?")} GB<br>${esc(m.runner||"")}</div></div>`;
   }).join("");
+  try{
+    const ra = await fetch("/api/apps"); const adata = await ra.json();
+    const apps = adata.apps || [];
+    document.getElementById("apps").innerHTML = apps.map(a=>`
+      <a class="tile" href="${esc(a.url)}" target="_blank" rel="noopener">
+        <span class="dot ${a.ok?"on":"off"}"></span> <span class="meta">${a.ok?"live":esc(a.status)}</span>
+        <div class="name">${esc(a.name)}</div>
+        <div class="meta">${esc(a.blurb||"")}<br>${esc(a.ok?"Open the storefront":(a.reason||""))}</div>
+      </a>`).join("") || '<div class="tile"><div class="meta">No apps yet</div></div>';
+  }catch(e){
+    document.getElementById("apps").innerHTML = '<div class="tile"><div class="meta">Apps unavailable</div></div>';
+  }
 }
 load(); setInterval(load, 20000);
 </script>
