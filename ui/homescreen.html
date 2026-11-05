@@ -171,12 +171,33 @@ function tabTo(id){
 document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click",()=>tabTo(b.dataset.tab)));
 const startTab=(location.hash||"").replace(/^#\/?/,""); if(["apps","hosted","models"].includes(startTab)) tabTo(startTab);
 
-/* ---- storage: read defensively. The storage lane adds sources to the
-   /api/devices payload (device.storage or device.hw.storage: a list of
-   {label|kind, free_gb, model_target?}); absent that, internal only. ---- */
+/* ---- storage: the landed USB lane's shape (device.hw.storage, also
+   accepted at device.storage): a list, internal first, then USB entries
+   {label, path, total_gb, free_gb, kind: "internal"|"usb", mounted};
+   an unmounted USB has path/free_gb null. The field may be absent on
+   old peers: treat that as internal only. ---- */
 function storageSources(d){
-  var s = d.storage || (d.hw && d.hw.storage) || null;
+  var s = (d.hw && d.hw.storage) || d.storage || null;
   return (Array.isArray(s) && s.length) ? s : null;
+}
+/* The installer's own storage resolution, mirrored so the UI reports
+   the same pick: MONICO_MODEL_DIR override (visible here only as an
+   explicit target flag on the payload if one ever ships) -> roomiest
+   mounted USB with >= 1 GB free, models at <mount>/monico-models ->
+   internal storage. */
+function pickInstallTarget(d){
+  var srcs = storageSources(d);
+  if(!srcs) return {name:"Internal storage", detail:""};
+  var t = srcs.find(function(s){return s.model_target || s.install_target || s.preferred});
+  if(t) return {name:(t.label || t.kind || "Storage")+" (set by override)", detail:t.path ? String(t.path) : ""};
+  var usb = srcs.filter(function(s){return s.kind==="usb" && s.mounted!==false && s.path && (s.free_gb||0) >= 1.0});
+  if(usb.length){
+    usb.sort(function(a,b){return (b.free_gb||0)-(a.free_gb||0)});
+    t = usb[0];
+    return {name:(t.label || "USB")+" (USB)", detail:String(t.path).replace(/\/+$/,"")+"/monico-models"};
+  }
+  t = srcs.find(function(s){return s.kind==="internal"}) || srcs[0];
+  return {name:(t.label || "Internal")+" storage", detail:t.path ? String(t.path) : ""};
 }
 function storageLine(d){
   var srcs = storageSources(d);
@@ -193,18 +214,9 @@ function storageLine(d){
     else f = "";
     return esc(label)+f;
   });
-  /* Install target mirrors the installer's own rule (bridge/storage.py
-     choose_model_storage): roomiest mounted USB with >= 1 GB free,
-     otherwise internal. An explicit model_target flag, if a future
-     payload carries one, wins. */
-  var t = srcs.find(function(s){return s.model_target || s.install_target || s.preferred});
-  if(!t){
-    var usb = srcs.filter(function(s){return s.kind==="usb" && s.mounted!==false && (s.free_gb||0) >= 1.0});
-    if(usb.length){ usb.sort(function(a,b){return (b.free_gb||0)-(a.free_gb||0)}); t = usb[0]; }
-  }
-  if(!t) t = srcs.find(function(s){return s.kind==="internal"}) || srcs[0];
-  var tname = (t.label || t.kind || "Internal") + (t.kind==="usb" ? " (USB)" : "");
-  return "Storage: "+parts.join(" &middot; ")+"<br>Install uses: "+esc(tname);
+  var pick = pickInstallTarget(d);
+  var uses = esc(pick.name) + (pick.detail ? " &middot; "+esc(pick.detail) : "");
+  return "Storage: "+parts.join(" &middot; ")+"<br>Install uses: "+uses;
 }
 
 /* ---- model install: real control, driven through POST /api/exec.
@@ -223,16 +235,20 @@ async function execOn(target, command, timeout_s){
   return r.json();
 }
 function splitOnce(s, mark){ const i = s.indexOf(mark); return i<0 ? [s,""] : [s.slice(0,i), s.slice(i+mark.length)]; }
+var installTargets = {};   // device_id -> pickInstallTarget() at click time
 function startInstall(did){
   if(installs[did] && installs[did].phase==="running") return;
-  installs[did] = {phase:"running", text:"Starting installer on the device..."};
+  var dev = lastDevs.find(function(x){ return x.device_id===did; });
+  var pick = dev ? pickInstallTarget(dev) : {name:"Internal storage", detail:""};
+  installTargets[did] = pick;
+  installs[did] = {phase:"running", text:"Starting installer... target storage: "+pick.name+(pick.detail ? " ("+pick.detail+")" : "")};
   renderDevices(lastDevs); renderModels(lastDevs);
   execOn(did, INSTALL_CMD, 30).then(function(res){
     if(res.error || res.blocked || (res.exit_code!==undefined && res.exit_code!==0 && !/started/.test(res.stdout||""))){
       installs[did] = {phase:"failed", text:(res.stderr || res.error || "installer could not start")};
       renderDevices(lastDevs); renderModels(lastDevs); return;
     }
-    installs[did] = {phase:"running", text:"Installer running. Big models can take a while to download."};
+    installs[did] = {phase:"running", text:"Installing to "+pick.name+"... big models can take a while to download."};
     renderDevices(lastDevs); renderModels(lastDevs);
     setTimeout(function(){ pollInstall(did, 0); }, 3000);
   }).catch(function(e){
@@ -251,7 +267,10 @@ async function pollInstall(did, n){
     const log = logRun[0]||"";
     const running = parseInt((logRun[1]||"0").trim(), 10) > 0;
     if(st && st.installed){
-      installs[did] = {phase:"done", text:"Installed: "+(st.model||"model")+" ("+(st.quant||"")+", "+(st.size_gb||"?")+" GB)"};
+      var landed = "";
+      if(st.storage && (st.storage.mount || st.storage.path)) landed = " on "+(st.storage.kind==="usb" ? "USB" : "Internal")+" storage ("+(st.storage.mount || st.storage.path)+")";
+      else if(installTargets[did]) landed = " on "+installTargets[did].name;
+      installs[did] = {phase:"done", text:"Installed: "+(st.model||"model")+" ("+(st.quant||"")+", "+(st.size_gb||"?")+" GB)"+landed};
       renderDevices(lastDevs); renderModels(lastDevs); load(); return;
     }
     const lines = log.trim().split("\n").filter(Boolean);
@@ -264,7 +283,8 @@ async function pollInstall(did, n){
       installs[did] = {phase:"failed", text: tail ? tail.slice(0,300) : "installer finished without installing a model"};
       renderDevices(lastDevs); renderModels(lastDevs); return;
     }
-    installs[did] = {phase:"running", text:"Installing..."+(tail ? " "+tail.slice(0,140) : "")};
+    var tgt = installTargets[did] ? installTargets[did].name : "device storage";
+    installs[did] = {phase:"running", text:"Installing to "+tgt+"..."+(tail && !errMatch ? " "+tail.slice(0,140) : "")};
     renderDevices(lastDevs); renderModels(lastDevs);
   }catch(e){ /* transient exec failure: keep polling */ }
   if(n < 150) setTimeout(function(){ pollInstall(did, n+1); }, 6000);
@@ -315,9 +335,10 @@ function renderModels(devs){
       <div class="row"><div class="name">No local model</div><span class="badge">Not installed</span></div>
       <div class="meta">on ${esc(d.name)}<br>${storageLine(d)}</div>
       ${installZone(d)}</div>`;
+    const stored = m.storage ? `<br>Stored on: ${m.storage.kind==="usb" ? "USB" : "Internal"} storage${(m.storage.mount || m.storage.path) ? " - "+esc(m.storage.mount || m.storage.path) : ""}` : "";
     return `<div class="tile">
       <div class="row"><div class="name">${esc(m.model||"model")}</div><span class="badge ok"><span class="dot"></span>Installed</span></div>
-      <div class="meta">on ${esc(d.name)}<br>${esc(m.quant||"")} - ${esc(m.size_gb||"?")} GB<br>${esc(m.runner||"")}<br>${storageLine(d)}</div>
+      <div class="meta">on ${esc(d.name)}<br>${esc(m.quant||"")} - ${esc(m.size_gb||"?")} GB<br>${esc(m.runner||"")}${stored}<br>${storageLine(d)}</div>
       ${installZone(d)}</div>`;
   }).join("");
 }
