@@ -186,11 +186,25 @@ function storageLine(d){
   }
   var parts = srcs.map(function(s){
     var label = s.label || s.kind || "Storage";
-    var f = (s.free_gb!=null) ? " - "+s.free_gb+" GB free" : (s.free_bytes!=null ? " - "+(s.free_bytes/1e9).toFixed(1)+" GB free" : "");
+    var f;
+    if(s.mounted === false) f = " - not mounted";
+    else if(s.free_gb!=null) f = " - "+s.free_gb+" GB free";
+    else if(s.free_bytes!=null) f = " - "+(s.free_bytes/1e9).toFixed(1)+" GB free";
+    else f = "";
     return esc(label)+f;
   });
-  var t = srcs.find(function(s){return s.model_target || s.install_target || s.preferred}) || srcs[0];
-  return "Storage: "+parts.join(" &middot; ")+"<br>Install uses: "+esc(t.label || t.kind || "Internal");
+  /* Install target mirrors the installer's own rule (bridge/storage.py
+     choose_model_storage): roomiest mounted USB with >= 1 GB free,
+     otherwise internal. An explicit model_target flag, if a future
+     payload carries one, wins. */
+  var t = srcs.find(function(s){return s.model_target || s.install_target || s.preferred});
+  if(!t){
+    var usb = srcs.filter(function(s){return s.kind==="usb" && s.mounted!==false && (s.free_gb||0) >= 1.0});
+    if(usb.length){ usb.sort(function(a,b){return (b.free_gb||0)-(a.free_gb||0)}); t = usb[0]; }
+  }
+  if(!t) t = srcs.find(function(s){return s.kind==="internal"}) || srcs[0];
+  var tname = (t.label || t.kind || "Internal") + (t.kind==="usb" ? " (USB)" : "");
+  return "Storage: "+parts.join(" &middot; ")+"<br>Install uses: "+esc(tname);
 }
 
 /* ---- model install: real control, driven through POST /api/exec.
