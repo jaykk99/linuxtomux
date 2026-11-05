@@ -34,28 +34,16 @@ CATALOG = [
     ("Dolphin3.0-Qwen2.5-1.5B", "bartowski/Dolphin3.0-Qwen2.5-1.5B-GGUF", 1.5,
      {"Q4_K_M": ("Dolphin3.0-Qwen2.5-1.5B-Q4_K_M.gguf", 1.05),
       "Q8_0": ("Dolphin3.0-Qwen2.5-1.5B-Q8_0.gguf", 1.70)}, "Dolphin (uncensored)"),
-    ("Dolphin3.0-Qwen2.5-3B", "bartowski/Dolphin3.0-Qwen2.5-3B-GGUF", 3.0,
-     {"Q4_K_M": ("Dolphin3.0-Qwen2.5-3B-Q4_K_M.gguf", 1.95),
-      "Q8_0": ("Dolphin3.0-Qwen2.5-3B-Q8_0.gguf", 3.30)}, "Dolphin (uncensored)"),
-    ("Dolphin3.0-Qwen2.5-7B", "bartowski/Dolphin3.0-Qwen2.5-7B-GGUF", 7.0,
-     {"Q4_K_M": ("Dolphin3.0-Qwen2.5-7B-Q4_K_M.gguf", 4.45),
-      "Q5_K_M": ("Dolphin3.0-Qwen2.5-7B-Q5_K_M.gguf", 5.15),
-      "Q8_0": ("Dolphin3.0-Qwen2.5-7B-Q8_0.gguf", 7.60)}, "Dolphin (uncensored)"),
+    ("Dolphin3.0-Qwen2.5-3B", "bartowski/Dolphin3.0-Qwen2.5-3b-GGUF", 3.0,
+     {"Q4_K_M": ("Dolphin3.0-Qwen2.5-3b-Q4_K_M.gguf", 1.95),
+      "Q8_0": ("Dolphin3.0-Qwen2.5-3b-Q8_0.gguf", 3.30)}, "Dolphin (uncensored)"),
     ("Dolphin3.0-Llama3.1-8B", "bartowski/Dolphin3.0-Llama3.1-8B-GGUF", 8.0,
      {"Q4_K_M": ("Dolphin3.0-Llama3.1-8B-Q4_K_M.gguf", 4.95),
       "Q5_K_M": ("Dolphin3.0-Llama3.1-8B-Q5_K_M.gguf", 5.75),
       "Q8_0": ("Dolphin3.0-Llama3.1-8B-Q8_0.gguf", 8.55)}, "Dolphin (uncensored)"),
-    ("Dolphin3.0-Qwen2.5-14B", "bartowski/Dolphin3.0-Qwen2.5-14B-GGUF", 14.0,
-     {"Q4_K_M": ("Dolphin3.0-Qwen2.5-14B-Q4_K_M.gguf", 8.95),
-      "Q5_K_M": ("Dolphin3.0-Qwen2.5-14B-Q5_K_M.gguf", 10.35),
-      "Q8_0": ("Dolphin3.0-Qwen2.5-14B-Q8_0.gguf", 15.05)}, "Dolphin (uncensored)"),
-    ("Dolphin3.0-Qwen2.5-32B", "bartowski/Dolphin3.0-Qwen2.5-32B-GGUF", 32.0,
-     {"Q4_K_M": ("Dolphin3.0-Qwen2.5-32B-Q4_K_M.gguf", 19.4),
-      "Q5_K_M": ("Dolphin3.0-Qwen2.5-32B-Q5_K_M.gguf", 22.4),
-      "Q8_0": ("Dolphin3.0-Qwen2.5-32B-Q8_0.gguf", 34.6)}, "Dolphin (uncensored)"),
-    ("Dolphin3.0-Qwen2.5-72B", "bartowski/Dolphin3.0-Qwen2.5-72B-GGUF", 72.0,
-     {"Q4_K_M": ("Dolphin3.0-Qwen2.5-72B-Q4_K_M.gguf", 43.5),
-      "Q5_K_M": ("Dolphin3.0-Qwen2.5-72B-Q5_K_M.gguf", 50.5)}, "Dolphin (uncensored)"),
+    # NOTE (2026-11-04): bartowski never published Dolphin3.0-Qwen2.5
+    # GGUFs above 3B (only 0.5B / 1.5B / 3b exist — verified against the
+    # HF API). The old 7B/14B/32B/72B entries 404'd on every install.
 ]
 QUANT_PREFERENCE = ["Q8_0", "Q5_K_M", "Q4_K_M"]  # best first when it fits
 KV_HEADROOM = 1.25  # weights may use at most usable/KV_HEADROOM of usable RAM

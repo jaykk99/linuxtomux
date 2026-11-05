@@ -19,8 +19,10 @@ def test_s22_and_big_linux_land_on_different_tiers():
     # S22: 8GB total, 2.8GB Android reserve -> 5.2GB usable -> /1.25 = 4.16GB
     # budget -> biggest fit is the 3B at Q8 or 7B at nothing... 3B Q8 = 3.3GB.
     assert phone["params_b"] == 3.0 and phone["quant"] == "Q8_0", phone
-    # 32GB Linux box: ~29GB available -> 23.2GB budget -> 32B at Q5_K_M (22.4GB).
-    assert big["params_b"] == 32.0 and big["quant"] == "Q5_K_M", big
+    # 32GB Linux box: ~29GB available -> 23.2GB budget -> biggest REAL
+    # catalogue fit is the Llama3.1-8B at Q8_0 (8.55GB). (The 32B Qwen
+    # entry was removed 2026-11-04: that GGUF was never published.)
+    assert big["params_b"] == 8.0 and big["quant"] == "Q8_0", big
 
 
 def test_vm_class_picks_7b_or_8b_q4():
