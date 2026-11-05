@@ -1,5 +1,5 @@
 === 1. Server A: monico-server start --name linux-a (port 8911) ===
-{"ok": true, "service": "monico-bridge", "version": "0.1.0", "server_id": "srv-195921c9", "name": "linux-a", "uptime_s": 0}
+{"ok": true, "service": "monico-bridge", "version": "0.1.0", "server_id": "srv-c850c32d", "name": "linux-a", "uptime_s": 0}
 pairing key acquired (length 43)
 === 2. Server B: monico-server start --name linux-b --join A (port 8912) ===
 PASS: B registered + online on A
@@ -10,15 +10,15 @@ PASS: T2 (on B) visible + online on A
 PASS: T1 (on A) visible + online on B
 === 4. (a) Shared device list: homescreen data on A and on B ===
 --- A /api/devices ---
-  linux-a      linux           online=True  via=-        id=srv-195921c9
-  linux-b      linux           online=True  via=-        id=srv-9a6471e5
-  termux-t1    linux           online=True  via=-        id=dev-d71206b0
-  termux-t2    linux           online=True  via=linux-b  id=dev-61138247
+  linux-a      linux           online=True  via=-        id=srv-c850c32d
+  linux-b      linux           online=True  via=-        id=srv-b7c0ba76
+  termux-t1    linux           online=True  via=-        id=dev-2c7e373f
+  termux-t2    linux           online=True  via=linux-b  id=dev-e100b3e7
 --- B /api/devices ---
-  linux-b      linux           online=True  via=-        id=srv-9a6471e5
-  termux-t2    linux           online=True  via=-        id=dev-61138247
-  linux-a      linux           online=True  via=linux-a  id=srv-195921c9
-  termux-t1    linux           online=True  via=linux-a  id=dev-d71206b0
+  linux-b      linux           online=True  via=-        id=srv-b7c0ba76
+  termux-t2    linux           online=True  via=-        id=dev-e100b3e7
+  linux-a      linux           online=True  via=linux-a  id=srv-c850c32d
+  termux-t1    linux           online=True  via=linux-a  id=dev-2c7e373f
 device count: A=4 B=4 (expect 4 and 4)
 PASS: both servers list exactly the 4 mesh nodes
 homescreen on A: HTTP 200, banner: MONICO LABS
@@ -38,10 +38,10 @@ exit=0 (marker env must be B's: /tmp/mesh-b)
 PASS: T2 marked offline on A after B died
 PASS: linux-b marked offline on A
 --- A /api/devices after B died ---
-  linux-a      linux           online=True  via=-        id=srv-195921c9
-  linux-b      linux           online=False via=-        id=srv-9a6471e5
-  termux-t1    linux           online=True  via=-        id=dev-d71206b0
-  termux-t2    linux           online=False via=linux-b  id=dev-61138247
+  linux-a      linux           online=True  via=-        id=srv-c850c32d
+  linux-b      linux           online=False via=-        id=srv-b7c0ba76
+  termux-t1    linux           online=True  via=-        id=dev-2c7e373f
+  termux-t2    linux           online=False via=linux-b  id=dev-e100b3e7
 A_STILL_OK
 PASS: A still executes local commands
 PASS: A health endpoint still answers
@@ -49,8 +49,8 @@ PASS: A health endpoint still answers
 PASS: linux-b back online on A
 PASS: T2 back online on A (rejoin heals)
 --- A /api/devices after rejoin ---
-  linux-a      linux           online=True  via=-        id=srv-195921c9
-  linux-b      linux           online=True  via=-        id=srv-9a6471e5
-  termux-t1    linux           online=True  via=-        id=dev-d71206b0
-  termux-t2    linux           online=True  via=linux-b  id=dev-61138247
+  linux-a      linux           online=True  via=-        id=srv-c850c32d
+  linux-b      linux           online=True  via=-        id=srv-b7c0ba76
+  termux-t1    linux           online=True  via=-        id=dev-2c7e373f
+  termux-t2    linux           online=True  via=linux-b  id=dev-e100b3e7
 === mesh proof done: 0 failure(s) ===

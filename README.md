@@ -23,6 +23,28 @@ monico-server start
 pairing key once; the Termux install below needs it, plus this
 machine's address.
 
+**Finding the Linux box's address (read this first):** every
+`<linux-host>` below means the Linux machine's real IP address on
+your network. Get it ON THE LINUX BOX by running:
+
+```sh
+hostname -I
+```
+
+Use the FIRST address it prints (for example `192.168.1.23`). Type
+the real address with NO angle brackets: write
+`http://192.168.1.23:8765`, never `http://<192.168.1.23>:8765` and
+never the literal word `<linux-host>`. Same for `<pairing key>`:
+paste the actual key the server printed, brackets off. Leaving the
+brackets or the placeholder words in is the one mistake that breaks
+the install.
+
+Worked example (fake numbers, real shape):
+
+```sh
+MONICO_SERVER=http://192.168.1.23:8765 MONICO_TOKEN=abc123-your-real-key ./install-termux.sh
+```
+
 **Termux** (the phone side):
 
 ```sh

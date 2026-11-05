@@ -1,11 +1,11 @@
 === 1. Linux side: monico-server start (port 8877) ===
-{"ok": true, "service": "monico-bridge", "version": "0.1.0", "server_id": "srv-f9013c98", "name": "htch-runtime", "uptime_s": 0}
+{"ok": true, "service": "monico-bridge", "version": "0.1.0", "server_id": "srv-0ec7ce18", "name": "htch-runtime", "uptime_s": 0}
 pairing key acquired (length 43)
 === 2. Termux side (simulated shell): monico-connect ===
 {
     "devices": [
         {
-            "device_id": "srv-f9013c98",
+            "device_id": "srv-0ec7ce18",
             "name": "htch-runtime",
             "platform": "linux",
             "kind": "server",
@@ -17,20 +17,10 @@ pairing key acquired (length 43)
                 "arch": "x86_64",
                 "cpu_cores": 4,
                 "ram_total_gb": 7.75,
-                "ram_available_gb": 1.72,
-                "disk_free_gb": 55.4,
+                "ram_available_gb": 2.66,
+                "disk_free_gb": 55.3,
                 "gpu": "none detected (CPU inference)",
-                "hostname": "htch-runtime",
-                "storage": [
-                    {
-                        "label": "Internal",
-                        "path": "/home/hatch",
-                        "total_gb": 161.0,
-                        "free_gb": 55.4,
-                        "kind": "internal",
-                        "mounted": true
-                    }
-                ]
+                "hostname": "htch-runtime"
             },
             "model": {
                 "installed": false
@@ -39,14 +29,14 @@ pairing key acquired (length 43)
                 "Monico Bridge homescreen",
                 "Bridge command channel"
             ],
-            "origin": "srv-f9013c98",
+            "origin": "srv-0ec7ce18",
             "origin_name": "htch-runtime",
             "local": true,
             "self": true,
             "via": null
         },
         {
-            "device_id": "dev-26f820ea",
+            "device_id": "dev-195798cd",
             "name": "termux-sim",
             "platform": "linux",
             "kind": "device",
@@ -59,20 +49,10 @@ pairing key acquired (length 43)
                 "arch": "x86_64",
                 "cpu_cores": 4,
                 "ram_total_gb": 7.75,
-                "ram_available_gb": 1.74,
-                "disk_free_gb": 0.4,
+                "ram_available_gb": 2.64,
+                "disk_free_gb": 0.3,
                 "gpu": "none detected (CPU inference)",
-                "hostname": "htch-runtime",
-                "storage": [
-                    {
-                        "label": "Internal",
-                        "path": "/tmp/monico-proof-phonehome",
-                        "total_gb": 0.5,
-                        "free_gb": 0.4,
-                        "kind": "internal",
-                        "mounted": true
-                    }
-                ]
+                "hostname": "htch-runtime"
             },
             "model": {
                 "installed": false
@@ -82,7 +62,7 @@ pairing key acquired (length 43)
                 "Hosted files (~/monico-host)",
                 "Remote commands"
             ],
-            "origin": "srv-f9013c98",
+            "origin": "srv-0ec7ce18",
             "origin_name": "htch-runtime",
             "local": true,
             "self": false,
@@ -102,11 +82,11 @@ exit=0
 === 5. Homescreen (owner key) ===
 HTTP 200
 MONICO LABS
-16
+22
 --- homescreen without key (must be login page) ---
 Owner access
 === 6. Phone hosted service, proxied through the bridge ===
-device_id=dev-26f820ea
+device_id=dev-195798cd
 {
     "device": "termux-sim",
     "hw": {
@@ -115,18 +95,18 @@ device_id=dev-26f820ea
         "arch": "x86_64",
         "cpu_cores": 4,
         "ram_total_gb": 7.75,
-        "ram_available_gb": 1.73,
-        "disk_free_gb": 0.4,
+        "ram_available_gb": 2.61,
+        "disk_free_gb": 0.3,
         "gpu": "none detected (CPU inference)",
-        "hostname": "htch-runtime",
-        "storage": [
-            {
-                "label": "Internal",
-                "path": "/tmp/monico-proof-phonehome",
-                "total_gb": 0.5,
-                "free_gb": 0.4,
-                "kind": "internal",
-                "mounted": true
+        "hostname": "htch-runtime"
+    },
+    "model": {
+        "installed": false
+    },
+    "hosted_files": [
+        "hello.txt"
+    ]
+}
 hosted-on-the-phone proof file
 
 === 7. Model installer dry runs (tier picks by hardware) ===
@@ -135,5 +115,5 @@ galaxy-s22 -> Dolphin3.0-Qwen2.5-3B Q8_0 3.3 GB, budget 4.16 GB
 [dry-run] nothing downloaded, nothing installed.
 linux-32gb  -> Dolphin3.0-Qwen2.5-32B Q5_K_M 22.4 GB, budget 23.2 GB
 [dry-run] nothing downloaded, nothing installed.
-this VM     -> Dolphin3.0-Qwen2.5-1.5B Q4_K_M 1.05 GB | detected RAM total/avail GB: 7.75 1.72
+this VM     -> Dolphin3.0-Qwen2.5-3B Q4_K_M 1.95 GB | detected RAM total/avail GB: 7.75 2.62
 === proof done ===

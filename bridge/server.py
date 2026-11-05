@@ -38,13 +38,48 @@ from .common import (DATA_DIR, KEY_FILE, VERSION, check_token,
 from .hwdetect import detect
 
 UI_FILE = Path(__file__).resolve().parent.parent / "ui" / "homescreen.html"
-LOGIN_HTML = """<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
-<title>Monico Labs</title><body style="font-family:system-ui;background:#0b0b0d;color:#f2f2f2;display:grid;place-items:center;min-height:100vh;margin:0">
-<form method="POST" action="/login" style="text-align:center">
-<h1 style="letter-spacing:.2em">MONICO LABS</h1><p>Owner access</p>
-<input name="key" type="password" placeholder="Pairing key" style="padding:12px;border-radius:10px;border:1px solid #333;background:#151517;color:#fff">
-<button style="padding:12px 18px;border-radius:10px;border:0;background:#e8e8e8;font-weight:700">Enter</button>
-</form></body>"""
+LOGIN_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Monico Labs — Bridge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  :root{--sans:"Inter Tight",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+        --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  *{box-sizing:border-box} ::selection{background:#fff;color:#000}
+  body{margin:0;background:#070707;color:#e5e5e5;font-family:var(--sans);display:grid;place-items:center;min-height:100vh;padding:24px 16px}
+  .wrap{display:flex;flex-direction:column;align-items:center;gap:28px;width:100%;max-width:380px}
+  .brand{display:flex;flex-direction:column;align-items:center;gap:14px;text-align:center}
+  .markwrap{position:relative}
+  .markwrap:before{content:"";position:absolute;inset:-16px;border-radius:9999px;background:rgba(255,255,255,.05);filter:blur(24px)}
+  .mark{position:relative;display:grid;place-items:center;width:80px;height:80px;border:1px solid #262626;border-radius:24px;background:#171717;box-shadow:0 25px 50px rgba(0,0,0,.6)}
+  .mark i{display:block;width:30px;height:30px;border-radius:6px;background:#fff;transform:rotate(45deg)}
+  h1{margin:0;font-size:24px;font-weight:900;letter-spacing:-.01em;text-transform:uppercase;color:#fff}
+  .sub{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.18em;color:#737373;text-transform:uppercase}
+  form{width:100%;border:1px solid #171717;border-radius:12px;background:rgba(10,10,10,.6);padding:20px}
+  label{display:block;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#737373}
+  input{margin-top:6px;height:40px;width:100%;border:1px solid #262626;border-radius:8px;background:#0a0a0a;padding:0 12px;font-family:var(--mono);font-size:12px;color:#f5f5f5}
+  input::placeholder{color:#525252}
+  input:focus{border-color:#737373;outline:none}
+  .hint{margin-top:6px;font-size:11px;color:#525252}
+  button{margin-top:16px;height:40px;width:100%;border:0;border-radius:8px;background:#fff;color:#0a0a0a;font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+  button:hover{background:#e5e5e5}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="brand">
+    <div class="markwrap"><div class="mark"><i></i></div></div>
+    <div><h1>Monico Labs</h1><div class="sub">Console Management Suite</div></div>
+  </div>
+  <form method="POST" action="/login">
+    <label for="key">Pairing key</label>
+    <input id="key" name="key" type="password" placeholder="Pairing key" autocomplete="off">
+    <div class="hint">Owner access. The key was shown once when this server was set up.</div>
+    <button type="submit">Enter</button>
+  </form>
+</div>
+</body></html>"""
 
 ONLINE_WINDOW_S = 40     # direct device is online if seen this recently
 REMOTE_FRESH_S = 45      # a peer's claims are trusted this long

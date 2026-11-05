@@ -3,86 +3,373 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Monico Labs - Home</title>
+<title>Monico Labs — Bridge</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 <style>
-  :root{--bg:#0b0b0d;--card:#16161a;--line:#26262c;--txt:#f2f2f2;--dim:#9a9aa3;--ok:#3ddc84;--off:#ff5a5a;--accent:#e8e8e8}
-  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--txt);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
-  header{padding:22px 20px 6px} .brand{letter-spacing:.35em;font-weight:800;font-size:15px}
-  .sub{color:var(--dim);margin-top:4px;font-size:13px}
-  main{padding:14px 16px 40px;max-width:980px;margin:0 auto}
-  h2{font-size:13px;letter-spacing:.25em;color:var(--dim);text-transform:uppercase;margin:22px 2px 10px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
-  .tile{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;min-height:118px;text-decoration:none;color:var(--txt);display:block}
-  .tile:active{transform:scale(.99)}
-  .tile .name{font-size:19px;font-weight:700;margin:6px 0 2px}
-  .tile .meta{color:var(--dim);font-size:13px;line-height:1.45}
-  .dot{display:inline-block;width:10px;height:10px;border-radius:50%;vertical-align:middle}
-  .on{background:var(--ok)} .off{background:var(--off)}
-  .big{font-size:26px} .tag{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 9px;font-size:11px;color:var(--dim);margin:2px 3px 0 0}
-  footer{color:var(--dim);font-size:12px;text-align:center;padding:0 20px 28px}
-  button{background:var(--accent);border:0;border-radius:10px;padding:9px 14px;font-weight:700;cursor:pointer}
+  /* Monico Labs console design system, ported from the Monico Labs
+     console (src/console/ui.tsx): page #070707, panels neutral-950/60
+     on neutral-900 borders, white primary actions, monospace
+     uppercase labels, square-corner badges. */
+  :root{
+    --bg:#070707; --panel:rgba(10,10,10,.6); --inset:#171717;
+    --line:#171717; --line2:#262626; --line3:#404040;
+    --txt:#e5e5e5; --strong:#f5f5f5;
+    --dim:#a3a3a3; --mut:#737373; --faint:#525252;
+    --ok-b:rgba(16,185,129,.25); --ok-bg:rgba(16,185,129,.10); --ok-t:#6ee7b7;
+    --bad-b:rgba(239,68,68,.25); --bad-bg:rgba(239,68,68,.10); --bad-t:#fca5a5;
+    --sans:"Inter Tight",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  ::selection{background:#fff;color:#000}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  a{color:inherit}
+
+  /* ---- console shell header ---- */
+  header.shell{position:sticky;top:0;z-index:30;background:rgba(10,10,10,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .shell-in{max-width:1280px;margin:0 auto;padding:0 16px}
+  @media(min-width:768px){.shell-in{padding:0 32px}}
+  .bar{display:flex;height:64px;align-items:center;justify-content:space-between;gap:12px}
+  .brand{display:flex;align-items:center;gap:12px;text-decoration:none;min-width:0}
+  .mark{display:grid;place-items:center;width:36px;height:36px;flex:none;border:1px solid #262626;border-radius:12px;background:#171717}
+  .mark i{display:block;width:14px;height:14px;border-radius:3px;background:#fff;transform:rotate(45deg)}
+  .wordmark{line-height:1.25}
+  .wordmark .l1{display:block;font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.12em;color:#fff}
+  .wordmark .l2{display:block;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.18em;color:var(--mut)}
+  @media(max-width:560px){.wordmark{display:none}}
+  .bar-r{display:flex;align-items:center;gap:8px}
+
+  /* ---- badges / buttons (console Badge + Btn) ---- */
+  .badge{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;border:1px solid var(--line2);border-radius:4px;padding:2px 8px;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;background:var(--inset);color:var(--dim)}
+  .badge.ok{border-color:var(--ok-b);background:var(--ok-bg);color:var(--ok-t)}
+  .badge.bad{border-color:var(--bad-b);background:var(--bad-bg);color:var(--bad-t)}
+  .badge.live{border-color:#fff;background:#fff;color:#0a0a0a}
+  .badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 16px;border:0;border-radius:8px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s,opacity .15s}
+  .btn.primary{background:#fff;color:#0a0a0a;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+  .btn.primary:hover{background:#e5e5e5}
+  .btn.secondary{border:1px solid #262626;background:#171717;color:var(--txt)}
+  .btn.secondary:hover{border-color:#404040}
+  .btn.sm{height:30px;padding:0 12px;font-size:10px}
+  .btn[disabled]{opacity:.45;cursor:wait}
+  .install-status{margin-top:10px;font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--mut);word-break:break-word}
+  .install-status.err{color:var(--bad-t)}
+  .install-status.done{color:var(--ok-t)}
+
+  /* ---- console tab nav ---- */
+  nav.tabs{display:flex;gap:20px;overflow-x:auto;scrollbar-width:none}
+  nav.tabs::-webkit-scrollbar{display:none}
+  nav.tabs button{display:flex;align-items:center;gap:6px;white-space:nowrap;background:none;border:0;border-bottom:2px solid transparent;padding:14px 0;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);cursor:pointer;transition:color .15s}
+  nav.tabs button svg{width:14px;height:14px;flex:none}
+  nav.tabs button:hover{color:#d4d4d4}
+  nav.tabs button.active{border-bottom-color:#e5e5e5;color:#fff}
+
+  /* ---- content + panels ---- */
+  main{max-width:1280px;margin:0 auto;padding:32px 16px 56px}
+  @media(min-width:768px){main{padding:32px 32px 56px}}
+  .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+  .panel + .panel{margin-top:20px}
+  .panel-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:14px 20px}
+  .panel-h h3{margin:0;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#d4d4d4}
+  .panel-h p{margin:2px 0 0;font-size:12px;color:var(--mut)}
+  .panel-b{padding:20px}
+
+  /* ---- stat blocks (console Stat) ---- */
+  .stats{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-bottom:20px}
+  @media(min-width:900px){.stats{grid-template-columns:repeat(4,1fr)}}
+  .stat{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px}
+  .stat .k{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--mut)}
+  .stat .v{margin-top:8px;font-size:24px;font-weight:900;letter-spacing:-.02em;color:#fff;font-variant-numeric:tabular-nums}
+  .stat .s{margin-top:4px;font-family:var(--mono);font-size:11px;color:var(--mut)}
+
+  /* ---- cards: console card shape, bridge tile content ---- */
+  .grid{display:grid;gap:16px}
+  @media(min-width:640px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(min-width:1100px){.grid{grid-template-columns:repeat(3,1fr)}}
+  .tile{display:block;border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;text-decoration:none;color:var(--txt);transition:border-color .15s}
+  a.tile:hover{border-color:var(--line3)}
+  .tile .row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .tile .name{font-size:15px;font-weight:700;color:var(--strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tile .meta{margin-top:4px;font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--mut)}
+  .tile .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+  .tile .actions{margin-top:14px}
+  .tile .blurb{margin-top:6px;font-size:13px;line-height:1.5;color:var(--dim)}
+  .tile .empty-note{font-family:var(--mono);font-size:12px;color:var(--mut)}
+  .hidden{display:none}
+  footer{max-width:1280px;margin:0 auto;padding:0 16px 32px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+  @media(min-width:768px){footer{padding:0 32px 32px}}
 </style>
 </head>
 <body>
-<header>
-  <div class="brand">MONICO LABS</div>
-  <div class="sub">Hosting homescreen. Your devices, your servers.</div>
+<header class="shell">
+  <div class="shell-in">
+    <div class="bar">
+      <a class="brand" href="/" aria-label="Monico Labs bridge home">
+        <span class="mark"><i></i></span>
+        <span class="wordmark"><span class="l1">MONICO LABS</span><span class="l2">CONSOLE MANAGEMENT SUITE</span></span>
+      </a>
+      <div class="bar-r">
+        <span class="badge ok" id="mesh-badge"><span class="dot"></span>Server</span>
+        <button class="btn primary" onclick="load()">Refresh</button>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="Sections">
+      <button data-tab="devices" class="active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="7" rx="2"/><rect x="2" y="14" width="20" height="7" rx="2"/><path d="M6 6.5h.01M6 17.5h.01"/></svg>Devices</button>
+      <button data-tab="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 4.9v10.2L12 22l-9-4.9V6.9L12 2Z"/><path d="m3.3 7 8.7 4.7 8.7-4.7"/><path d="M12 22V11.7"/></svg>Apps</button>
+      <button data-tab="hosted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20a15.3 15.3 0 0 1 0-20Z"/></svg>Hosted</button>
+      <button data-tab="models"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>Models</button>
+    </nav>
+  </div>
 </header>
 <main>
-  <h2>Connected devices</h2>
-  <div class="grid" id="devices"><div class="tile"><div class="meta">Loading devices...</div></div></div>
+  <section data-panel="devices">
+    <div class="stats">
+      <div class="stat"><div class="k">Devices online</div><div class="v" id="st-online">-</div><div class="s" id="st-online-sub">of - in the mesh</div></div>
+      <div class="stat"><div class="k">Devices</div><div class="v" id="st-devices">-</div><div class="s">servers + connected devices</div></div>
+      <div class="stat"><div class="k">Apps live</div><div class="v" id="st-apps">-</div><div class="s" id="st-apps-sub">hosted app status</div></div>
+      <div class="stat"><div class="k">Local models</div><div class="v" id="st-models">-</div><div class="s">installed across devices</div></div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><div><h3>Connected devices</h3><p>Your devices, your servers. Live mesh view.</p></div><span class="badge" id="dev-count">Loading</span></div>
+      <div class="panel-b"><div class="grid" id="devices"><div class="tile"><div class="empty-note">Loading devices...</div></div></div></div>
+    </div>
+  </section>
 
-  <h2>Apps</h2>
-  <div class="grid" id="apps"><div class="tile"><div class="meta">Loading apps...</div></div></div>
+  <section data-panel="apps" class="hidden">
+    <div class="panel">
+      <div class="panel-h"><div><h3>Apps</h3><p>Hosted web apps, same on every server in the mesh.</p></div></div>
+      <div class="panel-b"><div class="grid" id="apps"><div class="tile"><div class="empty-note">Loading apps...</div></div></div></div>
+    </div>
+  </section>
 
-  <h2>Hosted here</h2>
-  <div class="grid" id="hosted"><div class="tile"><div class="meta">Loading...</div></div></div>
+  <section data-panel="hosted" class="hidden">
+    <div class="panel">
+      <div class="panel-h"><div><h3>Hosted here</h3><p>Services running on each device, through the bridge.</p></div></div>
+      <div class="panel-b"><div class="grid" id="hosted"><div class="tile"><div class="empty-note">Loading...</div></div></div></div>
+    </div>
+  </section>
 
-  <h2>Models</h2>
-  <div class="grid" id="models"><div class="tile"><div class="meta">Loading...</div></div></div>
-
-  <p style="margin-top:26px"><button onclick="load()">Refresh</button></p>
+  <section data-panel="models" class="hidden">
+    <div class="panel">
+      <div class="panel-h"><div><h3>Models</h3><p>Local model on each device. Installs pick the biggest model that fits the device.</p></div></div>
+      <div class="panel-b"><div class="grid" id="models"><div class="tile"><div class="empty-note">Loading...</div></div></div></div>
+    </div>
+  </section>
 </main>
 <footer>Monico Labs. Owner access only.</footer>
 <script>
 function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
 function hwLine(hw){if(!hw) return "";var bits=[];if(hw.device_model)bits.push(hw.device_model);if(hw.arch)bits.push(hw.arch);if(hw.cpu_cores)bits.push(hw.cpu_cores+" cores");if(hw.ram_total_gb)bits.push(hw.ram_total_gb+" GB RAM");if(hw.disk_free_gb)bits.push(hw.disk_free_gb+" GB free");return bits.join(" - ")}
-async function load(){
-  const r = await fetch("/api/devices"); const data = await r.json();
-  const devs = data.devices || [];
+function badge(on){return on?'<span class="badge ok"><span class="dot"></span>Online</span>':'<span class="badge bad"><span class="dot"></span>Offline</span>'}
+function tabTo(id){
+  document.querySelectorAll("nav.tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab===id));
+  document.querySelectorAll("[data-panel]").forEach(p=>p.classList.toggle("hidden",p.dataset.panel!==id));
+  if(history.replaceState) history.replaceState(null,"",id==="devices"?"#/":"#/"+id);
+}
+document.querySelectorAll("nav.tabs button").forEach(b=>b.addEventListener("click",()=>tabTo(b.dataset.tab)));
+const startTab=(location.hash||"").replace(/^#\/?/,""); if(["apps","hosted","models"].includes(startTab)) tabTo(startTab);
+
+/* ---- storage: the landed USB lane's shape (device.hw.storage, also
+   accepted at device.storage): a list, internal first, then USB entries
+   {label, path, total_gb, free_gb, kind: "internal"|"usb", mounted};
+   an unmounted USB has path/free_gb null. The field may be absent on
+   old peers: treat that as internal only. ---- */
+function storageSources(d){
+  var s = (d.hw && d.hw.storage) || d.storage || null;
+  return (Array.isArray(s) && s.length) ? s : null;
+}
+/* The installer's own storage resolution, mirrored so the UI reports
+   the same pick: MONICO_MODEL_DIR override (visible here only as an
+   explicit target flag on the payload if one ever ships) -> roomiest
+   mounted USB with >= 1 GB free, models at <mount>/monico-models ->
+   internal storage. */
+function pickInstallTarget(d){
+  var srcs = storageSources(d);
+  if(!srcs) return {name:"Internal storage", detail:""};
+  var t = srcs.find(function(s){return s.model_target || s.install_target || s.preferred});
+  if(t) return {name:(t.label || t.kind || "Storage")+" (set by override)", detail:t.path ? String(t.path) : ""};
+  var usb = srcs.filter(function(s){return s.kind==="usb" && s.mounted!==false && s.path && (s.free_gb||0) >= 1.0});
+  if(usb.length){
+    usb.sort(function(a,b){return (b.free_gb||0)-(a.free_gb||0)});
+    t = usb[0];
+    return {name:(t.label || "USB")+" (USB)", detail:String(t.path).replace(/\/+$/,"")+"/monico-models"};
+  }
+  t = srcs.find(function(s){return s.kind==="internal"}) || srcs[0];
+  return {name:(t.label || "Internal")+" storage", detail:t.path ? String(t.path) : ""};
+}
+function storageLine(d){
+  var srcs = storageSources(d);
+  if(!srcs){
+    var free = (d.hw && d.hw.disk_free_gb!=null) ? " - "+d.hw.disk_free_gb+" GB free" : "";
+    return "Storage: Internal"+free+"<br>Install uses: Internal storage";
+  }
+  var parts = srcs.map(function(s){
+    var label = s.label || s.kind || "Storage";
+    var f;
+    if(s.mounted === false) f = " - not mounted";
+    else if(s.free_gb!=null) f = " - "+s.free_gb+" GB free";
+    else if(s.free_bytes!=null) f = " - "+(s.free_bytes/1e9).toFixed(1)+" GB free";
+    else f = "";
+    return esc(label)+f;
+  });
+  var pick = pickInstallTarget(d);
+  var uses = esc(pick.name) + (pick.detail ? " &middot; "+esc(pick.detail) : "");
+  return "Storage: "+parts.join(" &middot; ")+"<br>Install uses: "+uses;
+}
+
+/* ---- model install: real control, driven through POST /api/exec.
+   The installer (monico-model install) runs detached on the device,
+   logging to ~/.monico-bridge/model-install.log; the UI polls
+   `monico-model status` + the log tail + a process check until the
+   device reports an installed model or the installer exits. ---- */
+var installs = {};   // device_id -> {phase: running|done|failed, text}
+var lastDevs = [];
+var MODEL_BIN = 'M=$(command -v monico-model || echo "$HOME/.monico-bridge/app/monico-model"); ';
+var INSTALL_CMD = MODEL_BIN + ': > "$HOME/.monico-bridge/model-install.log"; nohup "$M" install </dev/null >> "$HOME/.monico-bridge/model-install.log" 2>&1 & echo started';
+var POLL_CMD = MODEL_BIN + '"$M" status; echo __LOG__; tail -c 1200 "$HOME/.monico-bridge/model-install.log" 2>/dev/null; echo __RUN__; (pgrep -fc "monico-model inst[a]ll" || echo 0)';
+async function execOn(target, command, timeout_s){
+  const r = await fetch("/api/exec", {method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({target:target, command:command, timeout_s:timeout_s||60})});
+  return r.json();
+}
+function splitOnce(s, mark){ const i = s.indexOf(mark); return i<0 ? [s,""] : [s.slice(0,i), s.slice(i+mark.length)]; }
+var installTargets = {};   // device_id -> pickInstallTarget() at click time
+function startInstall(did){
+  if(installs[did] && installs[did].phase==="running") return;
+  var dev = lastDevs.find(function(x){ return x.device_id===did; });
+  var pick = dev ? pickInstallTarget(dev) : {name:"Internal storage", detail:""};
+  installTargets[did] = pick;
+  installs[did] = {phase:"running", text:"Starting installer... target storage: "+pick.name+(pick.detail ? " ("+pick.detail+")" : "")};
+  renderDevices(lastDevs); renderModels(lastDevs);
+  execOn(did, INSTALL_CMD, 30).then(function(res){
+    if(res.error || res.blocked || (res.exit_code!==undefined && res.exit_code!==0 && !/started/.test(res.stdout||""))){
+      installs[did] = {phase:"failed", text:(res.stderr || res.error || "installer could not start")};
+      renderDevices(lastDevs); renderModels(lastDevs); return;
+    }
+    installs[did] = {phase:"running", text:"Installing to "+pick.name+"... big models can take a while to download."};
+    renderDevices(lastDevs); renderModels(lastDevs);
+    setTimeout(function(){ pollInstall(did, 0); }, 3000);
+  }).catch(function(e){
+    installs[did] = {phase:"failed", text:"exec failed: "+e};
+    renderDevices(lastDevs); renderModels(lastDevs);
+  });
+}
+async function pollInstall(did, n){
+  if(!installs[did] || installs[did].phase!=="running") return;
+  try{
+    const res = await execOn(did, POLL_CMD, 30);
+    const out = res.stdout || "";
+    const headTail = splitOnce(out, "__LOG__");
+    let st = null; try{ st = JSON.parse(headTail[0].trim()); }catch(e){}
+    const logRun = splitOnce(headTail[1]||"", "__RUN__");
+    const log = logRun[0]||"";
+    const running = parseInt((logRun[1]||"0").trim(), 10) > 0;
+    if(st && st.installed){
+      var landed = "";
+      if(st.storage && (st.storage.mount || st.storage.path)) landed = " on "+(st.storage.kind==="usb" ? "USB" : "Internal")+" storage ("+(st.storage.mount || st.storage.path)+")";
+      else if(installTargets[did]) landed = " on "+installTargets[did].name;
+      installs[did] = {phase:"done", text:"Installed: "+(st.model||"model")+" ("+(st.quant||"")+", "+(st.size_gb||"?")+" GB)"+landed};
+      renderDevices(lastDevs); renderModels(lastDevs); load(); return;
+    }
+    const lines = log.trim().split("\n").filter(Boolean);
+    // The installer logs pretty-printed JSON; surface its real "error"
+    // field on failure instead of a raw JSON tail line like "}".
+    const errMatch = log.match(/"error":\s*"([^"]+)"/);
+    const plain = lines.filter(function(l){ var t=l.trim(); return t!=="}" && t!=="{" && t!=="]" && t!=="["; });
+    const tail = errMatch ? errMatch[1] : (plain.length ? plain[plain.length-1].trim().replace(/^"|",?$/g, "") : "");
+    if(!running && n>=1){
+      installs[did] = {phase:"failed", text: tail ? tail.slice(0,300) : "installer finished without installing a model"};
+      renderDevices(lastDevs); renderModels(lastDevs); return;
+    }
+    var tgt = installTargets[did] ? installTargets[did].name : "device storage";
+    installs[did] = {phase:"running", text:"Installing to "+tgt+"..."+(tail && !errMatch ? " "+tail.slice(0,140) : "")};
+    renderDevices(lastDevs); renderModels(lastDevs);
+  }catch(e){ /* transient exec failure: keep polling */ }
+  if(n < 150) setTimeout(function(){ pollInstall(did, n+1); }, 6000);
+  else { installs[did] = {phase:"running", text:"Still installing. This panel updates when it finishes."};
+    renderDevices(lastDevs); renderModels(lastDevs); }
+}
+function installZone(d){
+  const st = installs[d.device_id];
+  const m = d.model || {};
+  if(m.installed){
+    return st && st.phase==="done" ? `<div class="install-status done">${esc(st.text)}</div>` : "";
+  }
+  let btn, status = "";
+  if(st && st.phase==="running"){
+    btn = `<button class="btn primary sm" disabled>Installing...</button>`;
+    status = `<div class="install-status">${esc(st.text)}</div>`;
+  } else {
+    btn = `<button class="btn primary sm" onclick="startInstall('${esc(d.device_id)}')">Install model</button>`;
+    if(st && st.phase==="failed") status = `<div class="install-status err">${esc(st.text)}</div>`;
+    if(st && st.phase==="done") status = `<div class="install-status done">${esc(st.text)}</div>`;
+  }
+  return `<div class="actions">${btn}</div>${status}`;
+}
+
+function renderDevices(devs){
   document.getElementById("devices").innerHTML = devs.map(d=>`
     <div class="tile">
-      <span class="dot ${d.online?"on":"off"}"></span> <span class="meta">${d.online?"online":"offline"}</span>
-      <div class="name">${esc(d.name)}</div>
-      <div class="meta">${esc(d.role||"")}${d.via?`<br>via ${esc(d.via)}`:""}<br>${esc(hwLine(d.hw))}</div>
+      <div class="row"><div class="name">${esc(d.name)}</div>${badge(d.online)}</div>
+      <div class="meta">${esc(d.role||"")}${d.via?`<br>via ${esc(d.via)}`:""}<br>${storageLine(d)}</div>
+      <div class="foot"><span>${esc(d.platform||"")}</span><span>${esc(hwLine(d.hw))}</span></div>
+      ${installZone(d)}
     </div>`).join("");
+}
+function renderHosted(devs){
   document.getElementById("hosted").innerHTML = devs.flatMap(d=>{
     const items = d.hosted || [];
     const link = d.self ? "" : `/device/${d.device_id}/hosted/`;
     return items.map(h=>`<a class="tile" href="${link||"#"}">
-      <div class="big">&#128230;</div><div class="name" style="font-size:16px">${esc(h)}</div>
-      <div class="meta">on ${esc(d.name)}</div></a>`);
-  }).join("") || '<div class="tile"><div class="meta">Nothing hosted yet</div></div>';
+      <div class="row"><div class="name">${esc(h)}</div><span class="badge">Hosted</span></div>
+      <div class="meta">on ${esc(d.name)}</div>
+      <div class="foot"><span>${esc(d.role||"")}</span><span>${d.online?"reachable":"offline"}</span></div></a>`);
+  }).join("") || '<div class="tile"><div class="empty-note">Nothing hosted yet</div></div>';
+}
+function renderModels(devs){
   document.getElementById("models").innerHTML = devs.map(d=>{
     const m = d.model || {};
-    if(!m.installed) return `<div class="tile"><div class="big">&#129302;</div>
-      <div class="name" style="font-size:16px">No local model</div>
-      <div class="meta">on ${esc(d.name)}<br>Run <b>monico-model install</b> there to add one.</div></div>`;
-    return `<div class="tile"><div class="big">&#129302;</div>
-      <div class="name" style="font-size:16px">${esc(m.model||"model")}</div>
-      <div class="meta">on ${esc(d.name)}<br>${esc(m.quant||"")} - ${esc(m.size_gb||"?")} GB<br>${esc(m.runner||"")}</div></div>`;
+    if(!m.installed) return `<div class="tile">
+      <div class="row"><div class="name">No local model</div><span class="badge">Not installed</span></div>
+      <div class="meta">on ${esc(d.name)}<br>${storageLine(d)}</div>
+      ${installZone(d)}</div>`;
+    const stored = m.storage ? `<br>Stored on: ${m.storage.kind==="usb" ? "USB" : "Internal"} storage${(m.storage.mount || m.storage.path) ? " - "+esc(m.storage.mount || m.storage.path) : ""}` : "";
+    return `<div class="tile">
+      <div class="row"><div class="name">${esc(m.model||"model")}</div><span class="badge ok"><span class="dot"></span>Installed</span></div>
+      <div class="meta">on ${esc(d.name)}<br>${esc(m.quant||"")} - ${esc(m.size_gb||"?")} GB<br>${esc(m.runner||"")}${stored}<br>${storageLine(d)}</div>
+      ${installZone(d)}</div>`;
   }).join("");
+}
+async function load(){
+  const r = await fetch("/api/devices"); const data = await r.json();
+  const devs = data.devices || [];
+  lastDevs = devs;
+  const online = devs.filter(d=>d.online).length;
+  document.getElementById("st-online").textContent = online;
+  document.getElementById("st-online-sub").textContent = "of "+devs.length+" in the mesh";
+  document.getElementById("st-devices").textContent = devs.length;
+  document.getElementById("st-models").textContent = devs.filter(d=>d.model&&d.model.installed).length;
+  document.getElementById("dev-count").textContent = devs.length+" devices";
+  const mb = document.getElementById("mesh-badge");
+  mb.className = "badge "+(online?"ok":"bad"); mb.innerHTML = '<span class="dot"></span>'+(online?online+" online":"Offline");
+  renderDevices(devs);
+  renderHosted(devs);
+  renderModels(devs);
   try{
     const ra = await fetch("/api/apps"); const adata = await ra.json();
     const apps = adata.apps || [];
+    document.getElementById("st-apps").textContent = apps.filter(a=>a.ok).length;
+    document.getElementById("st-apps-sub").textContent = "of "+apps.length+" hosted apps";
     document.getElementById("apps").innerHTML = apps.map(a=>`
       <a class="tile" href="${esc(a.url)}" target="_blank" rel="noopener">
-        <span class="dot ${a.ok?"on":"off"}"></span> <span class="meta">${a.ok?"live":esc(a.status)}</span>
-        <div class="name">${esc(a.name)}</div>
-        <div class="meta">${esc(a.blurb||"")}<br>${esc(a.ok?"Open the storefront":(a.reason||""))}</div>
-      </a>`).join("") || '<div class="tile"><div class="meta">No apps yet</div></div>';
+        <div class="row"><div class="name">${esc(a.name)}</div>${a.ok?'<span class="badge live">Live</span>':'<span class="badge bad">'+esc(a.status)+'</span>'}</div>
+        <div class="blurb">${esc(a.blurb||"")}</div>
+        <div class="foot"><span>${esc(a.ok?"Open the storefront":(a.reason||""))}</span><span>App</span></div>
+      </a>`).join("") || '<div class="tile"><div class="empty-note">No apps yet</div></div>';
   }catch(e){
-    document.getElementById("apps").innerHTML = '<div class="tile"><div class="meta">Apps unavailable</div></div>';
+    document.getElementById("apps").innerHTML = '<div class="tile"><div class="empty-note">Apps unavailable</div></div>';
   }
 }
 load(); setInterval(load, 20000);
