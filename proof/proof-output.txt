@@ -1,11 +1,11 @@
 === 1. Linux side: monico-server start (port 8877) ===
-{"ok": true, "service": "monico-bridge", "version": "0.1.0", "server_id": "srv-3cdd3a2b", "name": "htch-runtime", "uptime_s": 0}
+{"ok": true, "service": "monico-bridge", "version": "0.1.0", "server_id": "srv-74bf50e4", "name": "htch-runtime", "uptime_s": 0}
 pairing key acquired (length 43)
 === 2. Termux side (simulated shell): monico-connect ===
 {
     "devices": [
         {
-            "device_id": "srv-3cdd3a2b",
+            "device_id": "srv-74bf50e4",
             "name": "htch-runtime",
             "platform": "linux",
             "kind": "server",
@@ -17,8 +17,8 @@ pairing key acquired (length 43)
                 "arch": "x86_64",
                 "cpu_cores": 4,
                 "ram_total_gb": 7.75,
-                "ram_available_gb": 1.43,
-                "disk_free_gb": 56.9,
+                "ram_available_gb": 2.35,
+                "disk_free_gb": 55.4,
                 "gpu": "none detected (CPU inference)",
                 "hostname": "htch-runtime"
             },
@@ -29,14 +29,14 @@ pairing key acquired (length 43)
                 "Monico Bridge homescreen",
                 "Bridge command channel"
             ],
-            "origin": "srv-3cdd3a2b",
+            "origin": "srv-74bf50e4",
             "origin_name": "htch-runtime",
             "local": true,
             "self": true,
             "via": null
         },
         {
-            "device_id": "dev-f1a207a2",
+            "device_id": "dev-e86d17da",
             "name": "termux-sim",
             "platform": "linux",
             "kind": "device",
@@ -49,8 +49,8 @@ pairing key acquired (length 43)
                 "arch": "x86_64",
                 "cpu_cores": 4,
                 "ram_total_gb": 7.75,
-                "ram_available_gb": 1.45,
-                "disk_free_gb": 0.5,
+                "ram_available_gb": 2.41,
+                "disk_free_gb": 0.4,
                 "gpu": "none detected (CPU inference)",
                 "hostname": "htch-runtime"
             },
@@ -62,7 +62,7 @@ pairing key acquired (length 43)
                 "Hosted files (~/monico-host)",
                 "Remote commands"
             ],
-            "origin": "srv-3cdd3a2b",
+            "origin": "srv-74bf50e4",
             "origin_name": "htch-runtime",
             "local": true,
             "self": false,
@@ -82,11 +82,11 @@ exit=0
 === 5. Homescreen (owner key) ===
 HTTP 200
 MONICO LABS
-16
+22
 --- homescreen without key (must be login page) ---
 Owner access
 === 6. Phone hosted service, proxied through the bridge ===
-device_id=dev-f1a207a2
+device_id=dev-e86d17da
 {
     "device": "termux-sim",
     "hw": {
@@ -95,8 +95,8 @@ device_id=dev-f1a207a2
         "arch": "x86_64",
         "cpu_cores": 4,
         "ram_total_gb": 7.75,
-        "ram_available_gb": 1.45,
-        "disk_free_gb": 0.5,
+        "ram_available_gb": 2.36,
+        "disk_free_gb": 0.4,
         "gpu": "none detected (CPU inference)",
         "hostname": "htch-runtime"
     },
@@ -115,5 +115,5 @@ galaxy-s22 -> Dolphin3.0-Qwen2.5-3B Q8_0 3.3 GB, budget 4.16 GB
 [dry-run] nothing downloaded, nothing installed.
 linux-32gb  -> Dolphin3.0-Qwen2.5-32B Q5_K_M 22.4 GB, budget 23.2 GB
 [dry-run] nothing downloaded, nothing installed.
-this VM     -> Dolphin3.0-Qwen2.5-1.5B Q4_K_M 1.05 GB | detected RAM total/avail GB: 7.75 1.45
+this VM     -> Dolphin3.0-Qwen2.5-1.5B Q8_0 1.7 GB | detected RAM total/avail GB: 7.75 2.34
 === proof done ===
