@@ -255,7 +255,11 @@ async function pollInstall(did, n){
       renderDevices(lastDevs); renderModels(lastDevs); load(); return;
     }
     const lines = log.trim().split("\n").filter(Boolean);
-    const tail = lines.length ? lines[lines.length-1] : "";
+    // The installer logs pretty-printed JSON; surface its real "error"
+    // field on failure instead of a raw JSON tail line like "}".
+    const errMatch = log.match(/"error":\s*"([^"]+)"/);
+    const plain = lines.filter(function(l){ var t=l.trim(); return t!=="}" && t!=="{" && t!=="]" && t!=="["; });
+    const tail = errMatch ? errMatch[1] : (plain.length ? plain[plain.length-1].trim().replace(/^"|",?$/g, "") : "");
     if(!running && n>=1){
       installs[did] = {phase:"failed", text: tail ? tail.slice(0,300) : "installer finished without installing a model"};
       renderDevices(lastDevs); renderModels(lastDevs); return;
