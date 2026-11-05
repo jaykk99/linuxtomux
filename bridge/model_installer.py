@@ -22,6 +22,7 @@ from pathlib import Path
 
 from .common import DATA_DIR, MODEL_CONFIG, ensure_data_dir, save_json
 from .hwdetect import PROFILES, detect, usable_ram_gb
+from .storage import choose_model_storage
 
 MODELS_DIR = DATA_DIR / "models"
 
@@ -60,13 +61,21 @@ QUANT_PREFERENCE = ["Q8_0", "Q5_K_M", "Q4_K_M"]  # best first when it fits
 KV_HEADROOM = 1.25  # weights may use at most usable/KV_HEADROOM of usable RAM
 
 
-def pick(hw: dict) -> dict:
+def pick(hw: dict, storage_choice: dict | None = None) -> dict:
     """Biggest model whose weights fit usable RAM with KV headroom,
     at the best quant that still fits; must also fit on disk with the
-    disk kept half free for everything else the device does."""
+    disk kept half free for everything else the device does.
+
+    The disk side counts the CHOSEN storage (storage.choose_model_
+    storage: $MONICO_MODEL_DIR override > plugged-in USB > internal
+    default), so a USB drive's space can unlock a bigger pick than
+    the internal disk alone would. With no storage_choice, the old
+    behaviour is unchanged: hw["disk_free_gb"] (internal)."""
+    if storage_choice is None:
+        storage_choice = choose_model_storage(hw)
     usable = usable_ram_gb(hw)
     ram_budget = usable / KV_HEADROOM
-    disk_budget = float(hw.get("disk_free_gb") or 0) * 0.5
+    disk_budget = float(storage_choice.get("free_gb") or 0) * 0.5
     budget = min(ram_budget, disk_budget)
     best = None
     for name, repo, params, quants, lineage in CATALOG:
@@ -91,6 +100,11 @@ def pick(hw: dict) -> dict:
     best["budget_gb"] = round(budget, 2)
     best["url"] = f"https://huggingface.co/{best['repo']}/resolve/main/{best['file']}"
     best["hardware"] = hw
+    best["models_dir"] = storage_choice["models_dir"]
+    best["storage"] = {"kind": storage_choice["kind"],
+                       "path": storage_choice["models_dir"],
+                       "mount": storage_choice.get("mount"),
+                       "free_gb": storage_choice.get("free_gb")}
     return best
 
 
@@ -122,8 +136,9 @@ def _download(url: str, dest: Path) -> tuple[bool, str]:
 
 def install(hw: dict, choice: dict, smoke: bool = True) -> dict:
     ensure_data_dir()
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    dest = MODELS_DIR / choice["file"]
+    models_dir = Path(choice.get("models_dir") or MODELS_DIR)
+    models_dir.mkdir(parents=True, exist_ok=True)
+    dest = models_dir / choice["file"]
     result = {"choice": choice, "steps": []}
     if dest.exists() and dest.stat().st_size > 1_000_000:
         result["steps"].append(f"model already on disk: {dest}")
@@ -144,6 +159,11 @@ def install(hw: dict, choice: dict, smoke: bool = True) -> dict:
            "file": str(dest), "size_gb": choice["size_gb"],
            "installed_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
            "device": hw.get("device_model") or hw.get("hostname")}
+    # Record where the model actually lives (internal / USB / override)
+    # so the bridge's model status never claims the wrong disk.
+    if choice.get("storage"):
+        cfg["storage"] = choice["storage"]
+    cfg["models_dir"] = str(models_dir)
     runner = find_runner()
     cfg["runner"] = runner or "not installed yet"
     if smoke:

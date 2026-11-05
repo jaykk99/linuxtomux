@@ -49,12 +49,16 @@ LOGIN_HTML = """<!doctype html><meta name=viewport content="width=device-width,i
 ONLINE_WINDOW_S = 40     # direct device is online if seen this recently
 REMOTE_FRESH_S = 45      # a peer's claims are trusted this long
 SYNC_INTERVAL_S = 8      # seconds between peer registry syncs
+HW_REFRESH_S = 30        # re-detect own hardware at most this often,
+                         # so a USB drive plugged in after startup
+                         # shows up without a server restart
 
 
 class Bridge:
     def __init__(self, name: str | None = None, server_id: str | None = None) -> None:
         self.server_id = server_id or get_or_create_server_id()
         self.hw = detect()
+        self._hw_at = time.time()
         self.name = name or self.hw.get("hostname") or "linux"
         self.devices: dict[str, dict] = {}
         self.queues: dict[str, queue.Queue] = {}
@@ -108,8 +112,22 @@ class Bridge:
             "origin": self.server_id, "origin_name": self.name,
         }
 
+    def _refresh_hw(self) -> None:
+        """Re-run hardware detection at most every HW_REFRESH_S, so
+        hot-plugged storage (a USB drive) appears in device info
+        without restarting the server."""
+        now = time.time()
+        if now - self._hw_at < HW_REFRESH_S:
+            return
+        self._hw_at = now
+        try:
+            self.hw = detect()
+        except Exception:
+            pass
+
     def snapshot(self) -> list[dict]:
         """Records for devices hosted HERE (this server + direct clients)."""
+        self._refresh_hw()
         now = time.time()
         out = [self._self_record()]
         with self.lock:

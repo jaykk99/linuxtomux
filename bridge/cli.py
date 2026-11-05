@@ -146,7 +146,9 @@ def model_main(argv: list[str]) -> int:
                   "usable_ram_gb": choice["usable_ram_gb"],
                   "budget_gb": choice["budget_gb"],
                   "url": f"https://huggingface.co/{repo}/resolve/main/{fname}",
-                  "hardware": hw, "override": "--small smoke-test pick"}
+                  "hardware": hw, "override": "--small smoke-test pick",
+                  "models_dir": choice["models_dir"],
+                  "storage": choice["storage"]}
     print(json.dumps({"device_profile": hw, "pick": choice}, indent=2))
     if device == "both":
         print("[both] The other device gets its own pick from its own "

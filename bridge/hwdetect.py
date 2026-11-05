@@ -68,6 +68,14 @@ def detect() -> dict:
         "gpu": _gpu(),
         "hostname": platform.node(),
     }
+    # Additive: internal disk + any plugged-in USB drives, so device
+    # info (and the model installer's storage pick) sees USB space.
+    # disk_free_gb above stays internal-only, exactly as before.
+    try:
+        from .storage import detect_storage
+        hw["storage"] = detect_storage()
+    except Exception:
+        hw["storage"] = []
     return hw
 
 

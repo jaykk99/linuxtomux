@@ -215,6 +215,20 @@ and keyless). Never an RLHF-censored default, never a hosted API model.
 | Linux box, 32 GB | 23.2 GB | Dolphin3.0-Qwen2.5-32B Q5_K_M | `bartowski/Dolphin3.0-Qwen2.5-32B-GGUF` |
 | Linux box, 64 GB | 46.4 GB | Dolphin3.0-Qwen2.5-72B Q4_K_M | `bartowski/Dolphin3.0-Qwen2.5-72B-GGUF` |
 
+**USB storage counts.** Device info reports every storage a device
+has (internal disk plus plugged-in USB drives) in `hw.storage`, and
+the installer puts models on the first storage that fits this order:
+`$MONICO_MODEL_DIR` if set, else a mounted USB drive with at least
+1 GB free (models go under `<usb>/monico-models`), else the internal
+default. The pick's disk budget counts the chosen storage's free
+space, so a roomy USB drive unlocks a bigger model than a tight
+internal disk would. A USB drive plugged in after the server started
+is picked up automatically within about 30 s (the server re-detects
+its own hardware on an interval; clients re-detect on reconnect).
+Detection is read-only: an unmounted USB device is reported as
+detected-but-unmounted, never mounted or formatted for you, and
+`model.json` records which storage the model actually lives on.
+
 The full catalogue (0.5B to 72B, Q4_K_M / Q5_K_M / Q8_0) is in
 `bridge/model_installer.py`. The installer HEAD-checks the exact GGUF
 file before downloading, saves the pick to

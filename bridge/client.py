@@ -103,6 +103,12 @@ class Client:
             return json.loads(resp.read() or b"{}")
 
     def register(self) -> None:
+        # Fresh detection on every (re)register, so storage plugged
+        # in since the last connect (USB drive) is reported truthfully.
+        try:
+            self.hw = detect()
+        except Exception:
+            pass
         save_json(CLIENT_CONFIG, {"server_url": self.server, "key": self.key,
                                   "name": self.name, "device_id": self.device_id})
         info = {"device_id": self.device_id, "name": self.name,
