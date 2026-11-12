@@ -36,8 +36,10 @@ from .common import (DATA_DIR, KEY_FILE, VERSION, check_token,
                      get_or_create_server_id, log, model_status,
                      run_command)
 from .hwdetect import detect
+from .specs import clean_specs, live_specs
 
 UI_FILE = Path(__file__).resolve().parent.parent / "ui" / "homescreen.html"
+DASHBOARD_FILE = UI_FILE.parent / "dashboard.html"
 LOGIN_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Monico Labs — Bridge</title>
@@ -83,10 +85,12 @@ LOGIN_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 
 ONLINE_WINDOW_S = 40     # direct device is online if seen this recently
 REMOTE_FRESH_S = 45      # a peer's claims are trusted this long
-SYNC_INTERVAL_S = 8      # seconds between peer registry syncs
+SYNC_INTERVAL_S = 5      # seconds between peer registry syncs
 HW_REFRESH_S = 30        # re-detect own hardware at most this often,
                          # so a USB drive plugged in after startup
                          # shows up without a server restart
+SPECS_CACHE_S = 4        # this server's own live specs are re-read
+                         # at most this often (the dashboard polls)
 
 
 class Bridge:
@@ -94,6 +98,8 @@ class Bridge:
         self.server_id = server_id or get_or_create_server_id()
         self.hw = detect()
         self._hw_at = time.time()
+        self._specs: dict | None = None
+        self._specs_at = 0.0
         self.name = name or self.hw.get("hostname") or "linux"
         self.devices: dict[str, dict] = {}
         self.queues: dict[str, queue.Queue] = {}
@@ -112,19 +118,53 @@ class Bridge:
         did = info["device_id"]
         with self.lock:
             dev = self.devices.get(did, {})
+            info = dict(info)
+            specs = clean_specs(info.pop("specs", None))
             dev.update(info)
             dev["last_seen"] = time.time()
+            if specs:
+                dev["specs"] = specs
+                dev["specs_at"] = dev["last_seen"]
             self.devices[did] = dev
             self.queues.setdefault(did, queue.Queue())
         log(f"register {did} ({info.get('name')})")
         return {"ok": True, "device_id": did}
 
+    def set_specs(self, did: str, specs) -> bool:
+        """A directly connected device reporting its live specs (RAM,
+        storage, CPU, uptime, battery). Counts as a sign of life."""
+        specs = clean_specs(specs)
+        with self.lock:
+            dev = self.devices.get(did)
+            if dev is None or specs is None:
+                return False
+            now = time.time()
+            dev["specs"] = specs
+            dev["specs_at"] = now
+            dev["last_seen"] = now
+        return True
+
+    def own_specs(self) -> dict:
+        """This server's own live specs, briefly cached so a busy
+        dashboard does not re-read /proc on every request."""
+        now = time.time()
+        if self._specs is None or now - self._specs_at > SPECS_CACHE_S:
+            try:
+                self._specs = live_specs()
+            except Exception:
+                self._specs = self._specs or {}
+            self._specs_at = now
+        return self._specs
+
     def _self_record(self) -> dict:
+        specs = self.own_specs()
         return {
             "device_id": self.server_id, "name": self.name,
             "platform": "linux", "kind": "server", "role": "Linux server",
             "online": True, "hw": self.hw, "model": model_status(),
             "hosted": ["Monico Bridge homescreen", "Bridge command channel"],
+            "specs": specs,
+            "specs_age_s": int(max(0, time.time() - self._specs_at)),
             "origin": self.server_id, "origin_name": self.name,
         }
 
@@ -144,6 +184,9 @@ class Bridge:
             "last_seen_s": int(now - dev.get("last_seen", now)),
             "hw": dev.get("hw", {}), "model": dev.get("model", {"installed": False}),
             "hosted": dev.get("services", []),
+            "specs": dev.get("specs"),
+            "specs_age_s": (int(max(0, now - dev["specs_at"]))
+                            if dev.get("specs_at") else None),
             "origin": self.server_id, "origin_name": self.name,
         }
 
@@ -197,8 +240,13 @@ class Bridge:
                     best[did] = (cand, claim, rec)
         for did, (_cand, claim, rec) in best.items():
             fresh = now - claim["at"] < REMOTE_FRESH_S
+            age = rec.get("specs_age_s")
+            if isinstance(age, (int, float)):
+                # the peer measured this age when it sent the claim
+                age = int(age + max(0, now - claim["at"]))
             out[did] = {**rec, "local": False, "self": False,
                         "via": claim.get("via_name"),
+                        "specs_age_s": age,
                         "online": bool(rec.get("online")) and fresh}
         return list(out.values())
 
@@ -226,7 +274,21 @@ class Bridge:
                 continue
             grouped.setdefault(origin, {})[did] = rec
         now = time.time()
+        # The sender's record about ITSELF carries its live specs. A
+        # peer that joined us is also in our direct device list, and
+        # the direct entry wins when rendering, so refresh it here.
+        own = next((r for r in records or []
+                    if r.get("device_id") == via_id), None)
+        own_specs = clean_specs(own.get("specs")) if own else None
         with self.lock:
+            peer_dev = self.devices.get(via_id)
+            if peer_dev is not None and own_specs:
+                age = own.get("specs_age_s")
+                age = age if isinstance(age, (int, float)) else 0
+                peer_dev["specs"] = own_specs
+                peer_dev["specs_at"] = now - max(0, age)
+                if isinstance(own.get("hw"), dict) and own["hw"]:
+                    peer_dev["hw"] = own["hw"]
             stale = [k for k in self.claims
                      if k[0] == via_id and k[1] not in grouped]
             for key in stale:
@@ -337,7 +399,7 @@ class PeerLink:
         b = self.bridge
         info = {"device_id": b.server_id, "name": b.name,
                 "platform": "linux", "kind": "server", "hw": b.hw,
-                "model": model_status(),
+                "model": model_status(), "specs": b.own_specs(),
                 "services": ["Monico Bridge homescreen", "Bridge command channel"]}
         self._req("POST", "/bridge/register", info, timeout=20)
 
@@ -390,6 +452,27 @@ class PeerLink:
                    "result": {"error": f"unknown job type {jtype}"}},
                   timeout=20)
 
+    def _start_sync_loop(self) -> None:
+        """Registry sync on its own timer. It used to share the loop
+        with the long-poll below, which holds for up to 25s, so a
+        peer's devices (and now their live specs) could lag by that
+        much. On its own thread the dashboard stays a few seconds
+        fresh across servers. Errors are left to the main loop, which
+        owns reconnecting."""
+        if getattr(self, "_sync_thread", None):
+            return
+
+        def loop() -> None:
+            while True:
+                time.sleep(SYNC_INTERVAL_S)
+                try:
+                    self._sync()
+                except Exception:
+                    pass
+
+        self._sync_thread = threading.Thread(target=loop, daemon=True)
+        self._sync_thread.start()
+
     def run(self) -> None:
         backoff = 2
         while True:
@@ -399,11 +482,9 @@ class PeerLink:
                       f"(this server: {self.bridge.name})", flush=True)
                 log(f"peer link up: {self.peer}")
                 backoff = 2
-                last_sync = 0.0
+                self._sync()
+                self._start_sync_loop()
                 while True:
-                    if time.time() - last_sync > SYNC_INTERVAL_S:
-                        self._sync()
-                        last_sync = time.time()
                     resp = self._req(
                         "GET",
                         f"/bridge/poll?device_id={self.bridge.server_id}",
@@ -487,11 +568,19 @@ def make_handler():
                 did = (qs.get("device_id") or [""])[0]
                 return self._json(200, BRIDGE.poll(did))
             if not self._authed():
-                if p == "/":
-                    return self._send(200, LOGIN_HTML.encode(), "text/html; charset=utf-8")
+                if p in ("/", "/dashboard", "/dashboard/"):
+                    login = LOGIN_HTML
+                    if p != "/":
+                        login = login.replace('action="/login"',
+                                              'action="/login?next=/dashboard"')
+                    return self._send(200, login.encode(), "text/html; charset=utf-8")
                 return self._json(401, {"error": "owner key required"})
             if p == "/":
                 html = UI_FILE.read_text() if UI_FILE.exists() else "<h1>Monico Labs</h1>"
+                return self._send(200, html.encode(), "text/html; charset=utf-8")
+            if p in ("/dashboard", "/dashboard/"):
+                html = (DASHBOARD_FILE.read_text() if DASHBOARD_FILE.exists()
+                        else "<h1>Monico Labs</h1><p>dashboard.html missing</p>")
                 return self._send(200, html.encode(), "text/html; charset=utf-8")
             if p == "/api/devices":
                 return self._json(200, {"devices": BRIDGE.device_list()})
@@ -521,8 +610,11 @@ def make_handler():
                 form = parse_qs(self.rfile.read(n).decode() if n else "")
                 key = (form.get("key") or [""])[0]
                 if check_token(key):
+                    nxt = (parse_qs(u.query).get("next") or ["/"])[0]
+                    if nxt != "/dashboard":   # fixed allow-list, no open redirect
+                        nxt = "/"
                     return self._send(303, b"", "text/plain",
-                                      {"Location": "/",
+                                      {"Location": nxt,
                                        "Set-Cookie": f"monico_key={key}; Path=/; HttpOnly; SameSite=Lax"})
                 return self._send(403, b"bad key", "text/plain")
             if not self._authed():
@@ -532,6 +624,15 @@ def make_handler():
                 if not body.get("device_id"):
                     return self._json(400, {"error": "device_id required"})
                 return self._json(200, BRIDGE.register(body))
+            if p == "/bridge/specs":
+                did = body.get("device_id", "")
+                if not did:
+                    return self._json(400, {"error": "device_id required"})
+                if not BRIDGE.set_specs(did, body.get("specs")):
+                    # unknown device (server restarted) or junk payload
+                    return self._json(404, {"error": "unknown device or bad specs",
+                                            "reregister": True})
+                return self._json(200, {"ok": True})
             if p == "/bridge/peer-sync":
                 sid = body.get("server_id", "")
                 if not sid:

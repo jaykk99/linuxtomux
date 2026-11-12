@@ -19,6 +19,7 @@ import json
 import os
 import threading
 import time
+import urllib.error
 import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -27,8 +28,12 @@ from pathlib import Path
 from .common import (CLIENT_CONFIG, CLIENT_SERVICE_PORT, load_json,
                      log, model_status, run_command, save_json)
 from .hwdetect import detect
+from .specs import live_specs
 
 HOST_DIR = Path.home() / "monico-host"
+# How often this device reports its live specs (RAM, storage, CPU,
+# uptime, battery) to the server for the dashboard.
+SPECS_INTERVAL_S = float(os.environ.get("MONICO_SPECS_INTERVAL", "10"))
 
 
 # ----------------------------------------------------------------------
@@ -62,6 +67,7 @@ def start_hosted_service(port: int, name: str) -> ThreadingHTTPServer:
                 return self._send(200, html.encode())
             if self.path == "/status.json":
                 body = json.dumps({"device": name, "hw": detect(),
+                                   "specs": live_specs(),
                                    "model": model_status(),
                                    "hosted_files": sorted(p.name for p in HOST_DIR.iterdir() if p.is_file())},
                                   indent=2).encode()
@@ -113,11 +119,32 @@ class Client:
                                   "name": self.name, "device_id": self.device_id})
         info = {"device_id": self.device_id, "name": self.name,
                 "platform": self.hw["platform"], "kind": "device", "hw": self.hw,
-                "model": model_status(),
+                "model": model_status(), "specs": live_specs(),
                 "services": ["Device status page", "Hosted files (~/monico-host)",
                              "Remote commands"]}
         self._req("POST", "/bridge/register", info, timeout=20)
         log(f"client registered as {self.device_id}")
+
+    def _specs_loop(self) -> None:
+        """Report live specs on an interval, on its own short request
+        so it never waits behind the long-poll. Failures are silent:
+        the main loop owns reconnecting. If the server says it does
+        not know this device (it restarted), register again."""
+        while True:
+            time.sleep(max(2.0, SPECS_INTERVAL_S))
+            try:
+                self._req("POST", "/bridge/specs",
+                          {"device_id": self.device_id, "specs": live_specs()},
+                          timeout=15)
+            except urllib.error.HTTPError as exc:
+                try:
+                    again = json.loads(exc.read() or b"{}").get("reregister")
+                    if exc.code == 404 and again:
+                        self.register()
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
     def _handle_job(self, job: dict) -> dict:
         if job["type"] == "exec":
@@ -137,6 +164,7 @@ class Client:
     def run(self) -> None:
         start_hosted_service(CLIENT_SERVICE_PORT, self.name)
         print(f"Monico bridge: hosted service on 127.0.0.1:{CLIENT_SERVICE_PORT}", flush=True)
+        threading.Thread(target=self._specs_loop, daemon=True).start()
         backoff = 2
         while True:
             try:

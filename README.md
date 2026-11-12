@@ -207,6 +207,40 @@ kept as a cookie after that). Big phone-friendly tiles show:
 - **Models**: the local model installed on each device (name, quant,
   size), or a plain "run monico-model install" note when there is none.
 
+## Dashboard (live specs, every device)
+
+Open `http://<linux-host>:8765/dashboard` (or tap **Dashboard** on the
+homescreen; same pairing key). One page, one card per device in the
+mesh, Termux phones and Linux boxes alike:
+
+- **RAM** and **storage** as bars (used / total, percent; one storage
+  bar per drive, so a mounted USB drive gets its own).
+- **CPU** (model, cores, live usage), **OS** and kernel, **uptime**.
+- **Battery** on the phone (and on a Linux laptop): percent, charging
+  or not, temperature when the phone reports it.
+
+Every device reports about every 10 seconds (`monico-connect` does it
+by itself, on its own short request beside the command channel); the
+page refreshes every 5 seconds. Servers report their own specs, and
+specs ride the mesh sync, so one dashboard on any server shows the
+devices of every server. A device that drops off keeps its last
+reading on a dimmed card, marked Offline with how long ago it
+reported.
+
+Two honest gaps, both shown on the card rather than guessed:
+
+- **Phone battery** needs Termux:API: `pkg install termux-api` plus
+  the Termux:API app (F-Droid). Without it the card says so.
+- **Phone CPU usage**: Android hides `/proc/stat` from apps, so a
+  phone shows its CPU model and cores but no usage percent.
+
+Devices running an older copy of the bridge show a "no live specs
+yet" note: `git pull`, re-run the installer, restart
+`monico-connect` (or `monico-server start`). The same numbers are in
+`/api/devices` under each device's `specs` (shape documented in
+`bridge/specs.py`). `MONICO_SPECS_INTERVAL=<seconds>` changes how
+often a device reports.
+
 ## Optional model installer (uncensored, on-device)
 
 Explicit opt-in only. It never runs by itself.
@@ -279,8 +313,10 @@ monico-server / monico-connect / monico-cmd / monico-model   commands
 bridge/server.py     Linux side: registry, mesh sync, relay, homescreen
 bridge/client.py     Termux side: channel + the phone's hosted service
 bridge/cli.py        command-line entry points
+bridge/specs.py      live specs each device reports (RAM, storage, CPU, OS, uptime, battery)
 bridge/model_installer.py + hwdetect.py   hardware tiers, installer
 ui/homescreen.html   the Monico Labs homescreen
+ui/dashboard.html    the live device dashboard (/dashboard)
 install-linux.sh / install-termux.sh
 tests/               unit tests + run_proof.sh + run_mesh_proof.sh proofs
 integrations/termux-code/
