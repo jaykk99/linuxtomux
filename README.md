@@ -241,6 +241,41 @@ yet" note: `git pull`, re-run the installer, restart
 `bridge/specs.py`). `MONICO_SPECS_INTERVAL=<seconds>` changes how
 often a device reports.
 
+## Paired devices (two devices as one)
+
+On the dashboard, **Pair devices** → name the pair → tick the
+devices → **Pair them**. The pair gets one card:
+
+- **Shared specs**: RAM, storage and CPU cores of the online members
+  added up, plus the lowest battery in the pair.
+- **Separate specs**: each member's own bars underneath, so you can
+  see which one is filling up.
+- **One terminal** for the pair. In **Split** mode each command goes
+  to one member: they take turns (half and half on two healthy
+  devices), and a member that is running out (RAM 85%+ full, or
+  battery 15% or less and not charging) is spared while the other has
+  room. Put several commands on separate lines and they are dealt out
+  across the members and run at the same time. **Every device** mode
+  runs the command on all online members at once. Each result is
+  tagged with the device that ran it.
+
+From a shell, a pair is a target like any device:
+
+```sh
+monico-cmd duo 'python3 crunch.py part1'     # the pair picks who runs it
+monico-cmd duo --all 'git pull'              # every member
+```
+
+What pairing does not do: it does not merge memory. One program
+still runs on one device and can only use that device's RAM, so a
+job bigger than either device still will not fit; pairing decides
+which device takes each job and keeps both busy. Commands are
+independent shells, so `cd` and exported variables do not carry from
+one command to the next (it may land on the other device): chain
+with `&&` on one line. Pairs are saved on the server they were made
+on (`~/.monico-bridge/pools.json`) and can include devices from any
+server in the mesh. Rules live in `bridge/pools.py`.
+
 ## Optional model installer (uncensored, on-device)
 
 Explicit opt-in only. It never runs by itself.
@@ -316,6 +351,7 @@ bridge/cli.py        command-line entry points
 bridge/specs.py      live specs each device reports (RAM, storage, CPU, OS, uptime, battery)
 bridge/model_installer.py + hwdetect.py   hardware tiers, installer
 ui/homescreen.html   the Monico Labs homescreen
+bridge/pools.py      paired devices: shared specs, how the one terminal deals commands out
 ui/dashboard.html    the live device dashboard (/dashboard)
 install-linux.sh / install-termux.sh
 tests/               unit tests + run_proof.sh + run_mesh_proof.sh proofs

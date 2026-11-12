@@ -35,6 +35,7 @@ from .common import (DATA_DIR, KEY_FILE, VERSION, check_token,
                      ensure_data_dir, get_or_create_key,
                      get_or_create_server_id, log, model_status,
                      run_command)
+from . import pools as poolmod
 from .hwdetect import detect
 from .specs import clean_specs, live_specs
 
@@ -112,6 +113,12 @@ class Bridge:
         self.started = time.time()
         self.port: int | None = None
         self.app_probe = AppProbe()
+        # Pools: devices paired to act as one (see bridge/pools.py).
+        self.pools_file = DATA_DIR / "pools.json"
+        self.pools: dict[str, dict] = poolmod.load_pools(self.pools_file)
+        self.inflight: dict[str, int] = {}
+        self.last_used: dict[str, int] = {}
+        self._deal_seq = 0
 
     # -- device registry -------------------------------------------------
     def register(self, info: dict) -> dict:
@@ -258,6 +265,144 @@ class Bridge:
         (briefly cached) probe status. Apps are the same on every
         server in the mesh: they are web properties, not devices."""
         return self.app_probe.statuses(APPS)
+
+    # -- pools: paired devices that act as one ---------------------------
+    def pool_create(self, name: str, members: list) -> dict:
+        name = poolmod.clean_name(name)
+        if not name:
+            return {"error": "pool needs a name (letters, numbers, - _ .)"}
+        if name in ("linux", "server", "this", "phone"):
+            return {"error": f"{name!r} is a reserved target name"}
+        known = {d["device_id"]: d for d in self.known()}
+        members = list(dict.fromkeys(str(m) for m in members or []))
+        if not 2 <= len(members) <= poolmod.MAX_MEMBERS:
+            return {"error": f"a pool pairs 2 to {poolmod.MAX_MEMBERS} devices"}
+        unknown = [m for m in members if m not in known]
+        if unknown:
+            return {"error": f"unknown device(s): {', '.join(unknown)}"}
+        if any(d.get("name") == name for d in known.values()):
+            return {"error": f"a device is already named {name!r}"}
+        with self.lock:
+            if any(p["name"] == name for p in self.pools.values()):
+                return {"error": f"a pool named {name!r} already exists"}
+            pid = poolmod.new_pool_id()
+            self.pools[pid] = {"name": name, "members": members,
+                               "created": time.time()}
+            poolmod.save_pools(self.pools_file, self.pools)
+        log(f"pool create {pid} {name} members={members}")
+        return {"ok": True, "pool": self.pool_view(pid)}
+
+    def pool_delete(self, pid: str) -> dict:
+        with self.lock:
+            if pid not in self.pools:
+                return {"error": "unknown pool"}
+            del self.pools[pid]
+            poolmod.save_pools(self.pools_file, self.pools)
+        log(f"pool delete {pid}")
+        return {"ok": True}
+
+    def pool_find(self, ref: str) -> str | None:
+        with self.lock:
+            if ref in self.pools:
+                return ref
+            for pid, p in self.pools.items():
+                if p["name"] == ref:
+                    return pid
+        return None
+
+    def _pool_members(self, pool: dict, known: dict[str, dict]) -> list[dict]:
+        out = []
+        for did in pool["members"]:
+            d = known.get(did)
+            if d is None:   # its server left the mesh, or it was renamed away
+                out.append({"device_id": did, "name": did, "online": False,
+                            "missing": True, "specs": None})
+                continue
+            out.append({k: d.get(k) for k in
+                        ("device_id", "name", "platform", "kind", "online",
+                         "via", "self", "hw", "specs", "specs_age_s")}
+                       | {"tight": poolmod.is_tight(d) if d.get("online") else None,
+                          "busy": self.inflight.get(did, 0)})
+        return out
+
+    def pool_view(self, pid: str, known: dict[str, dict] | None = None) -> dict | None:
+        with self.lock:
+            pool = self.pools.get(pid)
+        if pool is None:
+            return None
+        if known is None:
+            known = {d["device_id"]: d for d in self.known()}
+        members = self._pool_members(pool, known)
+        return {"id": pid, "name": pool["name"], "members": members,
+                "online": sum(1 for m in members if m["online"]),
+                "combined": poolmod.combine(members)}
+
+    def pool_list(self) -> list[dict]:
+        known = {d["device_id"]: d for d in self.known()}
+        with self.lock:
+            ids = list(self.pools)
+        return [v for v in (self.pool_view(pid, known) for pid in ids) if v]
+
+    def pool_exec(self, ref: str, commands: list[str], mode: str = "split",
+                  timeout_s: float = 60) -> dict:
+        """The pool's one terminal. "split": each command goes to one
+        member, dealt out so the load is shared (half and half on two
+        healthy devices). "all": every command on every online member.
+        Everything runs at the same time; results come back in order."""
+        pid = self.pool_find(ref)
+        view = self.pool_view(pid) if pid else None
+        if view is None:
+            return {"error": f"unknown pool {ref!r}"}
+        commands = [c.strip() for c in commands or [] if str(c).strip()]
+        if not commands:
+            return {"error": "command required"}
+        if len(commands) > poolmod.MAX_BATCH:
+            return {"error": f"at most {poolmod.MAX_BATCH} commands at once"}
+        online = [m for m in view["members"] if m["online"]]
+        if not online:
+            return {"error": f"no device in pool {view['name']!r} is online"}
+        names = {m["device_id"]: m["name"] for m in view["members"]}
+        with self.lock:
+            if mode == "all":
+                plan = [(cmd, m["device_id"]) for cmd in commands for m in online]
+                for _cmd, did in plan:
+                    self.inflight[did] = self.inflight.get(did, 0) + 1
+            else:
+                mode = "split"
+                picks = poolmod.deal(view["members"], len(commands),
+                                     self.inflight, self.last_used,
+                                     self._deal_seq)
+                self._deal_seq += len(commands)
+                plan = list(zip(commands, picks))
+        results: list[dict | None] = [None] * len(plan)
+
+        def run(i: int, cmd: str, did: str) -> None:
+            try:
+                res = self.submit(did, {"type": "exec", "command": cmd,
+                                        "timeout_s": timeout_s},
+                                  wait_s=float(timeout_s) + 15)
+            except Exception as exc:
+                res = {"error": f"bridge error: {exc}"}
+            finally:
+                with self.lock:
+                    self.inflight[did] = max(0, self.inflight.get(did, 1) - 1)
+            results[i] = {"device_id": did, "device": names.get(did, did),
+                          "command": cmd, **res}
+            log(f"pool-exec pool={view['name']} on={did} cmd={cmd!r} "
+                f"-> exit={res.get('exit_code')}")
+
+        threads = [threading.Thread(target=run, args=(i, cmd, did), daemon=True)
+                   for i, (cmd, did) in enumerate(plan)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(float(timeout_s) + 40)
+        return {"pool": view["name"], "mode": mode,
+                "results": [r or {"error": "no answer in time",
+                                  "device_id": plan[i][1],
+                                  "device": names.get(plan[i][1], plan[i][1]),
+                                  "command": plan[i][0]}
+                            for i, r in enumerate(results)]}
 
     def apply_sync(self, via_id: str, via_name: str, records: list[dict]) -> list[dict]:
         """Store a peer's full device list as claims, keyed by the
@@ -584,6 +729,8 @@ def make_handler():
                 return self._send(200, html.encode(), "text/html; charset=utf-8")
             if p == "/api/devices":
                 return self._json(200, {"devices": BRIDGE.device_list()})
+            if p == "/api/pools":
+                return self._json(200, {"pools": BRIDGE.pool_list()})
             if p == "/api/apps":
                 return self._json(200, {"apps": BRIDGE.app_list()})
             if p.startswith("/device/"):
@@ -646,6 +793,22 @@ def make_handler():
             if p == "/bridge/result":
                 BRIDGE.complete(body.get("id", ""), body.get("result", {}))
                 return self._json(200, {"ok": True})
+            if p == "/api/pools":
+                res = BRIDGE.pool_create(body.get("name", ""),
+                                         body.get("members") or [])
+                return self._json(400 if "error" in res else 200, res)
+            if p == "/api/pools/delete":
+                res = BRIDGE.pool_delete(body.get("id", ""))
+                return self._json(404 if "error" in res else 200, res)
+            if p == "/api/pool-exec":
+                cmds = body.get("commands")
+                if not isinstance(cmds, list):
+                    cmds = [body.get("command", "")]
+                res = BRIDGE.pool_exec(body.get("pool", ""),
+                                       [str(c) for c in cmds],
+                                       mode=body.get("mode", "split"),
+                                       timeout_s=float(body.get("timeout_s", 60)))
+                return self._json(400 if "error" in res else 200, res)
             if p == "/api/exec":
                 target = body.get("target", "linux")
                 cmd = body.get("command", "")

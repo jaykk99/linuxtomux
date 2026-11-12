@@ -103,6 +103,58 @@
   .note{margin-top:14px;border:1px dashed var(--line2);border-radius:8px;padding:12px;font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--mut)}
   .note code{color:var(--txt)}
   .empty-note{font-family:var(--mono);font-size:12px;color:var(--mut)}
+  .panel + .panel{margin-top:20px}
+  .hidden{display:none !important}
+  .btn.secondary{border:1px solid #262626;background:#171717;color:var(--txt)}
+  .btn.secondary:hover{border-color:#404040}
+  .btn.sm{height:30px;padding:0 12px;font-size:10px}
+  .btn[disabled]{opacity:.45;cursor:wait}
+
+  /* ---- pools: paired devices shown and driven as one ---- */
+  .pool{border:1px solid var(--line2);border-radius:12px;background:var(--panel);padding:16px;min-width:0}
+  .pool + .pool{margin-top:16px}
+  .pool .row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .pool .name{font-size:18px;font-weight:700;color:var(--strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pool .meta{margin-top:4px;font-family:var(--mono);font-size:11px;line-height:1.55;color:var(--mut)}
+  .sect{margin-top:18px;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+  .sect span{font-weight:400;letter-spacing:.04em;text-transform:none;color:var(--mut)}
+  .shared{margin-top:12px;display:grid;gap:14px 24px;grid-template-columns:minmax(0,1fr)}
+  @media(min-width:700px){.shared{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .members{margin-top:12px;display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+  @media(min-width:700px){.members{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .member{border:1px solid var(--line);border-radius:10px;background:rgba(23,23,23,.35);padding:12px;min-width:0}
+  .member.off{opacity:.55}
+  .member .name{font-size:14px}
+  .member .meters{margin-top:10px;gap:10px}
+  .term{margin-top:12px;border:1px solid var(--line2);border-radius:10px;background:#050505;overflow:hidden}
+  .term-out{max-height:320px;min-height:72px;overflow:auto;padding:12px;font-family:var(--mono);font-size:12px;line-height:1.55;color:var(--txt)}
+  .term-out .hint{color:var(--faint)}
+  .term-out .ent + .ent{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+  .term-out .cmd{color:#fff;font-weight:600;word-break:break-all}
+  .term-out .who{display:inline-block;margin-right:8px;border:1px solid var(--line3);border-radius:4px;padding:0 6px;font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--dim);background:var(--inset)}
+  .term-out pre{margin:4px 0 0;font:inherit;white-space:pre-wrap;word-break:break-word;color:var(--txt)}
+  .term-out pre.err{color:var(--bad-t)}
+  .term-out .st{margin-top:2px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+  .term-out .st.bad{color:var(--bad-t)}
+  .term-in{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;border-top:1px solid var(--line2);padding:10px}
+  .term-in textarea{flex:1 1 220px;min-width:0;min-height:36px;max-height:160px;resize:vertical;border:1px solid var(--line2);border-radius:8px;background:#0a0a0a;padding:8px 10px;font-family:var(--mono);font-size:13px;line-height:1.4;color:var(--strong)}
+  .term-in textarea:focus{border-color:var(--mut);outline:none}
+  .term-in textarea::placeholder{color:var(--faint)}
+  .seg{display:inline-flex;border:1px solid var(--line2);border-radius:8px;overflow:hidden}
+  .seg button{height:34px;padding:0 12px;border:0;background:#0a0a0a;color:var(--mut);font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+  .seg button[aria-pressed="true"]{background:#e5e5e5;color:#0a0a0a}
+  .term-note{padding:0 12px 10px;font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--faint)}
+  .pair{margin-bottom:16px;border:1px dashed var(--line3);border-radius:12px;padding:16px}
+  .pair label.f{display:block;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--mut)}
+  .pair input[type=text]{margin-top:6px;height:38px;width:100%;max-width:320px;border:1px solid var(--line2);border-radius:8px;background:#0a0a0a;padding:0 12px;font-family:var(--mono);font-size:13px;color:var(--strong)}
+  .pair input[type=text]:focus{border-color:var(--mut);outline:none}
+  .pair .picks{margin:8px 0 14px;display:flex;flex-wrap:wrap;gap:8px}
+  .pair .pick{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line2);border-radius:8px;background:#0a0a0a;padding:8px 12px;font-family:var(--mono);font-size:12px;color:var(--txt);cursor:pointer}
+  .pair .pick input{accent-color:#e5e5e5;width:16px;height:16px;margin:0}
+  .pair .pick.off{color:var(--mut)}
+  .pair .acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .pair .msg{font-family:var(--mono);font-size:11px;color:var(--bad-t)}
+  .pair .help{margin:10px 0 14px;font-size:12px;line-height:1.5;color:var(--mut);max-width:640px}
   footer{max-width:1280px;margin:0 auto;padding:0 16px 32px;font-family:var(--mono);font-size:11px;color:var(--faint)}
   @media(min-width:768px){footer{padding:0 32px 32px}}
   @media(prefers-reduced-motion:reduce){.track i{transition:none}}
@@ -137,12 +189,29 @@
     <div class="stat"><div class="k">Storage in use</div><div class="v" id="st-disk">-</div><div class="s" id="st-disk-sub">across online devices</div></div>
     <div class="stat"><div class="k">Lowest battery</div><div class="v" id="st-bat">-</div><div class="s" id="st-bat-sub">no battery reported</div></div>
   </div>
+  <div class="panel hidden" id="pools-panel">
+    <div class="panel-h">
+      <div><h3>Paired devices</h3><p>Devices running as one: shared specs, each device's own specs, one terminal split across them.</p></div>
+      <span class="badge" id="pool-count">0 pools</span>
+    </div>
+    <div class="panel-b" id="pools"></div>
+  </div>
   <div class="panel">
     <div class="panel-h">
-      <div><h3>Live device specs</h3><p>Every Termux and Linux device on the mesh reports about every 10 seconds.</p></div>
-      <span class="badge" id="dev-count">Loading</span>
+      <div><h3 id="dev-title">Live device specs</h3><p>Every Termux and Linux device on the mesh reports about every 10 seconds.</p></div>
+      <div style="display:flex;align-items:center;gap:8px"><span class="badge" id="dev-count">Loading</span><button class="btn secondary sm" id="pair-open" onclick="togglePair()">Pair devices</button></div>
     </div>
-    <div class="panel-b"><div class="grid" id="cards"><div class="card"><div class="empty-note">Loading devices...</div></div></div></div>
+    <div class="panel-b">
+      <div class="pair hidden" id="pair">
+        <label class="f" for="pair-name">Name for the pair</label>
+        <input type="text" id="pair-name" placeholder="e.g. duo" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <div class="help">Pick the devices that run together. They get one card with their specs added up, their separate specs under it, and one terminal that splits commands across them. A program still runs on one device at a time; pairing chooses which, so neither runs out.</div>
+        <label class="f">Devices</label>
+        <div class="picks" id="pair-picks"></div>
+        <div class="acts"><button class="btn primary sm" id="pair-go" onclick="createPool()">Pair them</button><button class="btn secondary sm" onclick="togglePair(false)">Cancel</button><span class="msg" id="pair-msg"></span></div>
+      </div>
+      <div class="grid" id="cards"><div class="card"><div class="empty-note">Loading devices...</div></div></div>
+    </div>
   </div>
 </main>
 <footer>Monico Labs. Owner access only.</footer>
@@ -269,6 +338,144 @@ function summarize(devs){
   document.getElementById("st-bat-sub").textContent = low ? low.n+(low.s ? " · "+low.s : "") : "no battery reported";
 }
 
+/* ---- pools: paired devices, one card, one terminal ---- */
+var lastDevs = [], terms = {}, pairOpen = false;
+function sharedSpecs(p){
+  var c = p.combined || {}, r = c.ram || {}, st = c.storage || {}, cpu = c.cpu || {}, b = c.battery_low;
+  var n = c.members_counted || 0, out = "";
+  out += meter("CPU", num(cpu.pct)!=null ? '<span class="pct">'+pctTxt(cpu.pct)+'</span>'+usageTag(cpu.pct) : (cpu.cores ? cpu.cores+" cores" : "n/a"),
+    cpu.pct, usageLevel(cpu.pct), (cpu.cores||0)+" cores across "+n+" device"+(n===1?"":"s")+(num(cpu.pct)==null && cpu.cores ? " · usage hidden by Android" : ""));
+  out += r.total_gb ? meter("RAM", gb(r.used_gb).replace(" GB","")+" / "+gb(r.total_gb)+' <span class="pct">'+pctTxt(r.pct)+'</span>'+usageTag(r.pct),
+    r.pct, usageLevel(r.pct), esc(gb(r.available_gb))+" available in total") : meter("RAM","n/a",null,"","");
+  out += st.total_gb ? meter("Storage", gb(st.used_gb).replace(" GB","")+" / "+gb(st.total_gb)+' <span class="pct">'+pctTxt(st.pct)+'</span>'+usageTag(st.pct),
+    st.pct, usageLevel(st.pct), esc(gb(st.free_gb))+" free in total") : meter("Storage","n/a",null,"","");
+  if(b && num(b.percent)!=null){
+    var low = !b.plugged && b.percent<=15 ? "bad" : !b.plugged && b.percent<=30 ? "warn" : "";
+    out += meter("Lowest battery", '<span class="pct">'+Math.round(b.percent)+'%</span>'+(low?'<span class="tag '+low+'">Low</span>':""), b.percent, low, esc(b.device||"")+(b.status ? " · "+esc(b.status) : ""));
+  }
+  return out;
+}
+function memberCard(m){
+  var sp = m.specs && typeof m.specs==="object" ? m.specs : null;
+  var badge = m.missing ? '<span class="badge bad"><span class="dot"></span>Gone</span>' : statusBadge(m, m.online && sp && num(m.specs_age_s)!=null && m.specs_age_s>LIVE_AGE_S);
+  var kind = (m.platform||"").indexOf("android")===0 ? "Termux" : (m.kind==="server" ? "Linux server" : "Linux");
+  var bits = [m.missing ? "not in the mesh right now" : kind];
+  if(m.via) bits.push("via "+esc(m.via));
+  if(sp && sp.os && sp.os.name) bits.push(esc(sp.os.name));
+  if(sp) bits.push("up "+esc(dur(sp.uptime_s)));
+  var spare = m.tight ? '<br><span style="color:var(--warn-t)">Spared by the terminal: '+esc(m.tight)+'</span>' : "";
+  var busy = m.busy ? '<br>Running '+m.busy+' command'+(m.busy===1?"":"s") : "";
+  return '<div class="member'+(m.online?"":" off")+'"><div class="row"><div class="name">'+esc(m.name)+'</div>'+badge+'</div>'+
+    '<div class="meta">'+bits.join(" · ")+spare+busy+'</div>'+
+    (sp ? '<div class="meters">'+cpuMeter(sp,m)+ramMeter(sp)+storageMeters(sp,m)+batteryMeter(sp,m)+'</div>' : (m.missing ? "" : '<div class="note">No live specs from this device yet.</div>'))+'</div>';
+}
+function poolSpecs(p){
+  var n = p.members.length;
+  var st = p.online===n ? '<span class="badge ok"><span class="dot"></span>'+n+' of '+n+' live</span>' :
+           p.online ? '<span class="badge warn"><span class="dot"></span>'+p.online+' of '+n+' live</span>' :
+           '<span class="badge bad"><span class="dot"></span>Offline</span>';
+  return '<div class="row"><div class="name">'+esc(p.name)+'</div>'+st+'</div>'+
+    '<div class="meta">'+n+' devices running as one · '+p.members.map(function(m){return esc(m.name)}).join(" + ")+'</div>'+
+    '<div class="sect">Shared specs <span>· online devices added up</span></div><div class="shared">'+sharedSpecs(p)+'</div>'+
+    '<div class="sect">Separate specs</div><div class="members">'+p.members.map(memberCard).join("")+'</div>';
+}
+function termEntry(e){
+  if(e.pending) return '<div class="ent"><div class="cmd"><span class="who">'+esc(e.device||"…")+'</span>$ '+esc(e.command)+'</div><div class="st">running…</div></div>';
+  var body = "";
+  if(e.stdout) body += '<pre>'+esc(e.stdout.replace(/\n+$/,""))+'</pre>';
+  if(e.stderr) body += '<pre class="err">'+esc(e.stderr.replace(/\n+$/,""))+'</pre>';
+  if(e.error) body += '<pre class="err">'+esc(e.error)+'</pre>';
+  var bad = e.error || (e.exit_code!==undefined && e.exit_code!==0);
+  var stat = e.error ? "failed" : "exit "+e.exit_code+(num(e.duration_ms)!=null ? " · "+(e.duration_ms>=1000 ? (e.duration_ms/1000).toFixed(1)+"s" : e.duration_ms+"ms") : "");
+  return '<div class="ent"><div class="cmd"><span class="who">'+esc(e.device||"?")+'</span>$ '+esc(e.command)+'</div>'+body+'<div class="st'+(bad?" bad":"")+'">'+esc(stat)+'</div></div>';
+}
+function drawTerm(pid){
+  var t = terms[pid], el = document.querySelector('#'+pid+' .term-out'); if(!el) return;
+  el.innerHTML = t.entries.length ? t.entries.map(termEntry).join("") :
+    '<div class="hint">One terminal for the whole pair. Each command is sent to one device, taking turns and sparing whichever is short on RAM or battery. Put several commands on separate lines and they run at the same time, split across the devices.</div>';
+  el.scrollTop = el.scrollHeight;
+  var b = document.querySelector('#'+pid+' .run'); if(b){ b.disabled = !!t.running; b.textContent = t.running ? "Running…" : "Run"; }
+  document.querySelectorAll('#'+pid+' .seg button').forEach(function(x){ x.setAttribute("aria-pressed", String(x.dataset.mode===t.mode)); });
+  var note = document.querySelector('#'+pid+' .term-note');
+  if(note) note.textContent = t.mode==="all" ? "On every device: each command runs on all online devices in the pair at once." :
+    "Split: each command runs on one device. cd and variables do not carry between commands, so chain with && on one line.";
+}
+async function runPool(pid){
+  var t = terms[pid], box = document.querySelector('#'+pid+' textarea'); if(!box || t.running) return;
+  var cmds = box.value.split("\n").map(function(x){return x.trim()}).filter(Boolean); if(!cmds.length) return;
+  box.value = ""; t.running = true;
+  var first = t.entries.length;
+  cmds.forEach(function(c){ t.entries.push({pending:true, command:c, device:t.mode==="all"?"all":"…"}); });
+  drawTerm(pid);
+  var res;
+  try{
+    var r = await fetch("/api/pool-exec", {method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({pool:pid, commands:cmds, mode:t.mode, timeout_s:60})});
+    res = await r.json();
+  }catch(e){ res = {error:"could not reach the server: "+e}; }
+  var done = res.results || cmds.map(function(c){ return {command:c, device:"pool", error:res.error||"no result"}; });
+  t.entries.splice.apply(t.entries, [first, cmds.length].concat(done));
+  if(t.entries.length>200) t.entries = t.entries.slice(-200);
+  t.running = false; drawTerm(pid); load();
+}
+function setMode(pid, mode){ terms[pid].mode = mode; drawTerm(pid); }
+function unpair(pid, btn){
+  if(btn.dataset.sure!=="1"){ btn.dataset.sure="1"; btn.textContent="Really unpair?"; setTimeout(function(){ btn.dataset.sure=""; btn.textContent="Unpair"; }, 4000); return; }
+  fetch("/api/pools/delete", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({id:pid})}).then(load);
+}
+function renderPools(pools){
+  var wrap = document.getElementById("pools"), seen = {};
+  document.getElementById("pools-panel").classList.toggle("hidden", !pools.length);
+  document.getElementById("pool-count").textContent = pools.length+(pools.length===1?" pair":" pairs");
+  pools.forEach(function(p){
+    seen[p.id]=1;
+    var el = document.getElementById(p.id);
+    if(!el){
+      terms[p.id] = terms[p.id] || {entries:[], mode:"split", running:false};
+      el = document.createElement("div"); el.className="pool"; el.id=p.id;
+      el.innerHTML = '<div class="pool-specs"></div><div class="sect">Terminal <span>· one for the pair</span></div>'+
+        '<div class="term"><div class="term-out" aria-live="polite"></div>'+
+        '<div class="term-in"><textarea rows="1" placeholder="Command. One per line to split several across the devices." autocapitalize="off" autocomplete="off" spellcheck="false" aria-label="Command for '+esc(p.name)+'"></textarea>'+
+        '<div class="seg" role="group" aria-label="Where commands run"><button type="button" data-mode="split">Split</button><button type="button" data-mode="all">Every device</button></div>'+
+        '<button class="btn primary run" type="button">Run</button><button class="btn secondary sm unpair" type="button">Unpair</button></div>'+
+        '<div class="term-note"></div></div>';
+      wrap.appendChild(el);
+      el.querySelector(".run").addEventListener("click", function(){ runPool(p.id); });
+      el.querySelector(".unpair").addEventListener("click", function(){ unpair(p.id, this); });
+      el.querySelectorAll(".seg button").forEach(function(b){ b.addEventListener("click", function(){ setMode(p.id, b.dataset.mode); }); });
+      el.querySelector("textarea").addEventListener("keydown", function(ev){ if(ev.key==="Enter" && !ev.shiftKey && !ev.isComposing){ ev.preventDefault(); runPool(p.id); } });
+      drawTerm(p.id);
+    }
+    var html = poolSpecs(p), box = el.querySelector(".pool-specs");
+    if(box._html!==html){ box.innerHTML = html; box._html = html; }
+  });
+  Array.prototype.slice.call(wrap.children).forEach(function(el){ if(!seen[el.id]){ el.remove(); delete terms[el.id]; } });
+}
+function togglePair(force){
+  pairOpen = force===undefined ? !pairOpen : force;
+  document.getElementById("pair").classList.toggle("hidden", !pairOpen);
+  document.getElementById("pair-msg").textContent = "";
+  if(pairOpen){
+    document.getElementById("pair-picks").innerHTML = lastDevs.map(function(d){
+      return '<label class="pick'+(d.online?"":" off")+'"><input type="checkbox" value="'+esc(d.device_id)+'"> '+esc(d.name)+(d.online?"":" (offline)")+'</label>';
+    }).join("") || '<span class="empty-note">No devices yet.</span>';
+    document.getElementById("pair-name").focus();
+  }
+}
+async function createPool(){
+  var msg = document.getElementById("pair-msg");
+  var members = Array.prototype.slice.call(document.querySelectorAll("#pair-picks input:checked")).map(function(x){return x.value});
+  var name = document.getElementById("pair-name").value.trim();
+  if(!name){ msg.textContent = "Give the pair a name."; return; }
+  if(members.length<2){ msg.textContent = "Pick at least two devices."; return; }
+  try{
+    var r = await fetch("/api/pools", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({name:name, members:members})});
+    var res = await r.json();
+    if(res.error){ msg.textContent = res.error; return; }
+    document.getElementById("pair-name").value = ""; togglePair(false); load();
+  }catch(e){ msg.textContent = "Could not reach the server."; }
+}
+
 var lastOk = 0, cardHtml = {};
 function setBadge(cls, text){ var b=document.getElementById("live-badge"); b.className="badge "+cls; b.innerHTML='<span class="dot"></span>'+esc(text); }
 async function load(){
@@ -276,14 +483,24 @@ async function load(){
     var r = await fetch("/api/devices", {cache:"no-store"});
     if(r.status===401){ location.href="/dashboard"; return; }
     var devs = (await r.json()).devices || [];
+    var pools = [];
+    try{ var rp = await fetch("/api/pools", {cache:"no-store"}); if(rp.ok) pools = (await rp.json()).pools || []; }catch(e){}
+    lastDevs = devs.slice();
     devs.sort(function(a,b){
       return (b.online-a.online) || ((b.self?1:0)-(a.self?1:0)) || ((b.kind==="server")-(a.kind==="server")) || String(a.name).localeCompare(String(b.name));
     });
     summarize(devs);
+    renderPools(pools);
+    // Paired devices live on their pair's card; the grid keeps the rest.
+    var paired = {}; pools.forEach(function(p){ p.members.forEach(function(m){ paired[m.device_id]=1; }); });
+    var total = devs.length;
+    devs = devs.filter(function(d){ return !paired[d.device_id]; });
+    document.getElementById("dev-title").textContent = pools.length ? "Other devices" : "Live device specs";
+    document.getElementById("dev-count").textContent = devs.length+(devs.length===1?" device":" devices");
     // Update cards in place, keyed by device id, so bars glide to
     // their new width instead of the whole grid being rebuilt.
     var grid = document.getElementById("cards"), seen = {};
-    if(!devs.length){ grid.innerHTML='<div class="card"><div class="empty-note">No devices yet. Run monico-connect on a device.</div></div>'; cardHtml={}; }
+    if(!devs.length){ grid.innerHTML='<div class="card"><div class="empty-note">'+(total ? "Every device is in a pair." : "No devices yet. Run monico-connect on a device.")+'</div></div>'; cardHtml={}; }
     devs.forEach(function(d, i){
       var id = "c-"+String(d.device_id).replace(/[^A-Za-z0-9_-]/g,"_"); seen[id]=1;
       var html = card(d), el = document.getElementById(id);
@@ -303,7 +520,7 @@ async function load(){
     });
     Object.keys(cardHtml).forEach(function(id){ if(!seen[id]){ var el=document.getElementById(id); if(el) el.remove(); delete cardHtml[id]; } });
     lastOk = Date.now();
-    var on = devs.filter(function(d){return d.online}).length;
+    var on = lastDevs.filter(function(d){return d.online}).length;
     setBadge(on?"ok":"bad", on ? on+" online · live" : "All offline");
   }catch(e){
     setBadge("bad", lastOk ? "Server unreachable" : "Cannot load");

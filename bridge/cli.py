@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+import urllib.error
 import urllib.request
 
 from .common import (CLIENT_CONFIG, DEFAULT_PORT, KEY_FILE, accepted_tokens,
@@ -98,12 +99,63 @@ def _resolve_target(name: str) -> str:
     return resolve_from_list(devices, name)
 
 
+def _find_pool(base: str, key: str, name: str) -> dict | None:
+    """A pool (devices paired on the dashboard) can be targeted by
+    name exactly like a device. Old servers have no /api/pools: that
+    just means no pools."""
+    if name in ("linux", "server", "this", "phone"):
+        return None
+    try:
+        req = urllib.request.Request(base + "/api/pools",
+                                     headers={"X-Pair-Key": key})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            pools = json.loads(resp.read()).get("pools", [])
+    except Exception:
+        return None
+    for p in pools:
+        if name in (p.get("name"), p.get("id")):
+            return p
+    return None
+
+
+def _pool_cmd(base: str, key: str, pool: dict, command: str) -> int:
+    """monico-cmd <pool> [--all] <command>: the pool picks which
+    member runs it (or every member with --all)."""
+    mode = "split"
+    if command.startswith("--all "):
+        mode, command = "all", command[len("--all "):]
+    try:
+        res = _post(base + "/api/pool-exec", key,
+                    {"pool": pool["id"], "command": command, "mode": mode,
+                     "timeout_s": 60}, timeout=130)
+    except urllib.error.HTTPError as exc:
+        res = json.loads(exc.read() or b"{}")
+    if "error" in res:
+        print(f"[bridge] {res['error']}", file=sys.stderr)
+        return 1
+    worst = 0
+    for r in res.get("results", []):
+        print(f"[{pool['name']} -> {r.get('device')}]", file=sys.stderr)
+        if r.get("stdout"):
+            sys.stdout.write(r["stdout"])
+        if r.get("stderr"):
+            sys.stderr.write(r["stderr"])
+        if "error" in r:
+            print(f"[bridge] {r['error']}", file=sys.stderr)
+            worst = worst or 1
+        worst = worst or int(r.get("exit_code", 0) or 0)
+    return worst
+
+
 def cmd_main(argv: list[str]) -> int:
     if len(argv) < 2:
-        print("usage: monico-cmd <linux|phone|device-name|device-id> <command...>")
+        print("usage: monico-cmd <linux|phone|device-name|device-id|pool-name> <command...>")
         return 2
     target_name, command = argv[0], " ".join(argv[1:])
     base, key = _bridge_endpoint()
+    pool = _find_pool(base, key, target_name)
+    if pool:
+        return _pool_cmd(base, key, pool, command)
     target = _resolve_target(target_name)
     res = _post(base + "/api/exec", key,
                 {"target": target, "command": command, "timeout_s": 60})
