@@ -111,15 +111,15 @@ def usable_ram_gb(hw: dict) -> float:
 
 
 # Named dry-run profiles so tier picks can be shown for hardware this
-# VM does not have (e.g. Jay's Galaxy S22) without pretending the VM
+# VM does not have (e.g. an 8 GB Android phone) without pretending the VM
 # is that hardware. Labelled as profiles everywhere they are used.
 PROFILES: dict[str, dict] = {
-    "galaxy-s22": {
-        "platform": "android-termux", "device_model": "Samsung Galaxy S22",
+    "android-8gb": {
+        "platform": "android-termux", "device_model": "Android phone (8 GB)",
         "arch": "aarch64", "cpu_cores": 8, "ram_total_gb": 8.0,
         "ram_available_gb": 0, "disk_free_gb": 64.0,
-        "gpu": "Adreno 730 (no local LLM GPU path, CPU inference)",
-        "hostname": "galaxy-s22 (profile)",
+        "gpu": "mobile GPU (no local LLM GPU path, CPU inference)",
+        "hostname": "android-8gb (profile)",
     },
     "linux-vm-8gb": {
         "platform": "linux", "device_model": "", "arch": "x86_64",

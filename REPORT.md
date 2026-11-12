@@ -75,7 +75,7 @@ Tier table (device class -> pick):
 | Device class | Measured budget | Pick | Repo |
 |---|---|---|---|
 | Small phone / 4 GB RAM | ~1 GB | Dolphin3.0-Qwen2.5-1.5B Q8_0 (1.70 GB file) | bartowski/Dolphin3.0-Qwen2.5-1.5B-GGUF |
-| Galaxy S22 (8 GB, Android reserve) | 4.16 GB | Dolphin3.0-Qwen2.5-3B Q8_0 (3.30 GB file) | bartowski/Dolphin3.0-Qwen2.5-3B-GGUF |
+| Android phone (8 GB, Android reserve) | 4.16 GB | Dolphin3.0-Qwen2.5-3B Q8_0 (3.30 GB file) | bartowski/Dolphin3.0-Qwen2.5-3B-GGUF |
 | Linux VM, 8 GB (6.5 GB available) | 5.2 GB | Dolphin3.0-Llama3.1-8B Q4_K_M (4.95 GB file) | bartowski/Dolphin3.0-Llama3.1-8B-GGUF |
 | Linux box, 32 GB | 23.2 GB | Dolphin3.0-Qwen2.5-32B Q5_K_M (22.4 GB file) | bartowski/Dolphin3.0-Qwen2.5-32B-GGUF |
 | Linux box, 64 GB | 46.4 GB | Dolphin3.0-Qwen2.5-72B Q4_K_M (43.5 GB file) | bartowski/Dolphin3.0-Qwen2.5-72B-GGUF |
@@ -83,9 +83,10 @@ Tier table (device class -> pick):
 Full catalogue in `bridge/model_installer.py` (CATALOG): 0.5B, 1.5B,
 3B, 7B, 8B (Llama3.1), 14B, 32B, 72B, each in Q4_K_M plus Q5_K_M and/or
 Q8_0 where published, all Dolphin (uncensored) lineage. Dry-run tier
-picks proven in the E2E log for a Galaxy S22 profile, a 32 GB Linux
-profile, and this VM, and the S22 vs big-Linux picks land on different
-tiers (unit-tested).
+picks proven in the E2E log for an 8 GB Android phone profile, a 32 GB
+Linux profile, and this VM, and the Android-8GB vs big-Linux picks land
+on different tiers (unit-tested). (Note 2026-11-12: the dry-run profile
+formerly named galaxy-s22 is now android-8gb; specs unchanged.)
 
 **Real installer run (done):** the small smoke model
 `Dolphin3.0-Qwen2.5-0.5B-Q4_K_M.gguf` (397,811,008 bytes) was
@@ -123,7 +124,7 @@ short prompt and `-n 16`, and record the output in model.json.
 
 - Unit: `python3 tests/test_bridge.py` — 5/5 PASS (re-run
   2026-11-03 ~17:58 EST): denylist, catalogue URLs all HF-resolve,
-  catalogue uncensored-only, S22 vs big-Linux different tiers, VM
+  catalogue uncensored-only, Android-8GB vs big-Linux different tiers, VM
   class picks 7B/8B Q4.
 - E2E: `tests/run_proof.sh` — full pass, exit 0, re-run in the finish
   pass; log in `proof/proof-output.txt`.
@@ -223,7 +224,7 @@ stdlib-only rule.
 ## Still needs Jay
 
 1. **Real-phone test:** run the Termux connect command above on the
-   actual phone (Galaxy S22) against a running `monico-server`, and
+   actual phone (any Android phone) against a running `monico-server`, and
    confirm the phone shows up on the homescreen and serves its hosted
    files. Everything else was proven with a simulated Termux shell.
 2. **termux-code gate deploy (his tap only):** the integration in
