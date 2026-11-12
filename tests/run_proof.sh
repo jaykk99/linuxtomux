@@ -65,8 +65,8 @@ curl -s -H "X-Pair-Key: $KEY" "$BASE/device/$DEVID/hosted/status.json" | python3
 curl -s -H "X-Pair-Key: $KEY" "$BASE/device/$DEVID/hosted/files/hello.txt"; echo
 
 echo "=== 7. Model installer dry runs (tier picks by hardware) ==="
-python3 "$REPO/monico-model" install --dry-run --profile galaxy-s22 | \
-  python3 -c "import json,sys; d=json.load(sys.stdin); p=d['pick']; print('galaxy-s22 ->', p['model'], p['quant'], p['size_gb'], 'GB, budget', p['budget_gb'], 'GB')"
+python3 "$REPO/monico-model" install --dry-run --profile android-8gb | \
+  python3 -c "import json,sys; d=json.load(sys.stdin); p=d['pick']; print('android-8gb ->', p['model'], p['quant'], p['size_gb'], 'GB, budget', p['budget_gb'], 'GB')"
 python3 "$REPO/monico-model" install --dry-run --profile linux-box-32gb | \
   python3 -c "import json,sys; d=json.load(sys.stdin); p=d['pick']; print('linux-32gb  ->', p['model'], p['quant'], p['size_gb'], 'GB, budget', p['budget_gb'], 'GB')"
 python3 "$REPO/monico-model" install --dry-run | \

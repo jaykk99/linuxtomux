@@ -188,6 +188,10 @@ def model_main(argv: list[str]) -> int:
             device = argv[i + 1]
         if a == "--profile" and i + 1 < len(argv):
             profile = argv[i + 1]
+    if profile and profile not in PROFILES:
+        print(f"unknown profile: {profile} "
+              f"(available: {', '.join(sorted(PROFILES))})", file=sys.stderr)
+        return 2
     hw = PROFILES[profile] if profile else detect()
     choice = model_installer.pick(hw)
     if small:  # smoke-test override: smallest catalogue entry

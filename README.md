@@ -152,8 +152,8 @@ targetable on its own:
 ```sh
 # phone 1 and phone 2, same server
 monico-connect --name pixel-8
-monico-connect --name galaxy-s22
-monico-cmd galaxy-s22 'termux-battery-status'
+monico-connect --name phone
+monico-cmd phone 'termux-battery-status'
 ```
 
 **More Linux boxes**: start the second server with `--join` pointing
@@ -174,7 +174,7 @@ mesh:
 
 ```sh
 # run from linux-a, executes on the phone that is connected to linux-b
-monico-cmd galaxy-s22 'uname -a'
+monico-cmd phone 'uname -a'
 ```
 
 Two mixes, same commands:
@@ -383,7 +383,7 @@ and keyless). Never an RLHF-censored default, never a hosted API model.
 | Device class | Measured budget | Pick | File |
 |---|---|---|---|
 | Small phone / 4 GB RAM | ~1 GB | Dolphin3.0-Qwen2.5-1.5B Q8_0 | `bartowski/Dolphin3.0-Qwen2.5-1.5B-GGUF` |
-| Galaxy S22 (8 GB, Android reserve) | 4.16 GB | Dolphin3.0-Qwen2.5-3B Q8_0 | `bartowski/Dolphin3.0-Qwen2.5-3B-GGUF` |
+| Android phone (8 GB, Android reserve) | 4.16 GB | Dolphin3.0-Qwen2.5-3B Q8_0 | `bartowski/Dolphin3.0-Qwen2.5-3B-GGUF` |
 | Linux VM, 8 GB (6.5 GB available) | 5.2 GB | Dolphin3.0-Llama3.1-8B Q4_K_M | `bartowski/Dolphin3.0-Llama3.1-8B-GGUF` |
 | Linux box, 32 GB | 23.2 GB | Dolphin3.0-Qwen2.5-32B Q5_K_M | `bartowski/Dolphin3.0-Qwen2.5-32B-GGUF` |
 | Linux box, 64 GB | 46.4 GB | Dolphin3.0-Qwen2.5-72B Q4_K_M | `bartowski/Dolphin3.0-Qwen2.5-72B-GGUF` |
@@ -447,7 +447,7 @@ integrations/termux-code/
 client (a clean shell standing in for the phone; real Android Termux
 cannot run inside this VM), runs a command both ways, fetches the
 homescreen, pulls the phone's hosted status + a hosted file through
-the bridge, and prints model tier picks for a Galaxy S22 profile, a
+the bridge, and prints model tier picks for an 8 GB Android phone profile, a
 32 GB Linux profile, and this machine. Output: `proof/proof-output.txt`.
 Unit tests: `python3 tests/test_bridge.py`.
 

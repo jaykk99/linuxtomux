@@ -30,7 +30,8 @@
   ui/homescreen.html; integrations/termux-code/ (README + TokenPanel
   patch, patch VERIFIED applying cleanly against current TokenPanel.jsx).
 - Unit tests: 5/5 PASS (python3 tests/test_bridge.py). Tier picks:
-  galaxy-s22 -> Dolphin3.0-Qwen2.5-3B Q8_0 (3.3 GB, budget 4.16 GB);
+  android-8gb -> Dolphin3.0-Qwen2.5-3B Q8_0 (3.3 GB, budget 4.16 GB);
+  (profile renamed from galaxy-s22, 2026-11-12; same 8 GB specs)
   linux-vm-8gb -> Dolphin3.0-Llama3.1-8B Q4_K_M; linux-box-32gb ->
   Dolphin3.0-Qwen2.5-32B Q5_K_M (22.4 GB, budget 23.2 GB).
 - E2E proof PASSED, full log in proof/proof-output.txt:

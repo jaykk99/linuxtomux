@@ -12,17 +12,30 @@ from bridge.common import blocked_reason  # noqa: E402
 from bridge.hwdetect import PROFILES  # noqa: E402
 
 
-def test_s22_and_big_linux_land_on_different_tiers():
-    phone = model_installer.pick(PROFILES["galaxy-s22"])
+def test_android_8gb_and_big_linux_land_on_different_tiers():
+    phone = model_installer.pick(PROFILES["android-8gb"])
     big = model_installer.pick(PROFILES["linux-box-32gb"])
     assert phone["params_b"] < big["params_b"], (phone, big)
-    # S22: 8GB total, 2.8GB Android reserve -> 5.2GB usable -> /1.25 = 4.16GB
-    # budget -> biggest fit is the 3B at Q8 or 7B at nothing... 3B Q8 = 3.3GB.
+    # Android 8GB phone: 8GB total, 2.8GB Android reserve -> 5.2GB usable
+    # -> /1.25 = 4.16GB budget -> biggest fit is the 3B at Q8 or 7B at
+    # nothing... 3B Q8 = 3.3GB.
     assert phone["params_b"] == 3.0 and phone["quant"] == "Q8_0", phone
     # 32GB Linux box: ~29GB available -> 23.2GB budget -> biggest REAL
     # catalogue fit is the Llama3.1-8B at Q8_0 (8.55GB). (The 32B Qwen
     # entry was removed 2026-11-04: that GGUF was never published.)
     assert big["params_b"] == 8.0 and big["quant"] == "Q8_0", big
+
+
+def test_no_galaxy_s22_profile_remains():
+    # The 8GB Android dry-run profile is generic now: Jay has more than
+    # one phone, so no profile, label, or example may assume an S22.
+    assert "galaxy-s22" not in PROFILES
+    prof = PROFILES["android-8gb"]
+    assert prof["platform"] == "android-termux"
+    assert prof["ram_total_gb"] == 8.0 and prof["cpu_cores"] == 8
+    assert prof["arch"] == "aarch64"
+    assert "s22" not in prof["device_model"].lower()
+    assert "samsung" not in prof["device_model"].lower()
 
 
 def test_vm_class_picks_7b_or_8b_q4():
