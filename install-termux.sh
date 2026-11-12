@@ -4,8 +4,12 @@
 # to ~/.monico-bridge/app, launchers land in $PREFIX/bin, secrets are
 # written to a local env file with 0600 perms, never echoed back.
 #
-#   pkg install python git
-#   curl -fsSL <host>/install-termux.sh | MONICO_SERVER=http://<linux>:8765 MONICO_TOKEN=<pairing key> bash
+# Run it with the exact command printed by `monico-server start` on
+# the Linux box (real address and key already filled in). That command
+# fetches this script AND the app files from the Linux box itself, so
+# it works with no internet on the phone as long as it is on the same
+# WiFi. Without a server URL it falls back to a git clone, which needs
+# internet.
 #
 # Or clone the repo and run ./install-termux.sh from inside it.
 set -eu
@@ -18,6 +22,15 @@ SRC_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo "")"
 if [ -f "$SRC_DIR/monico-connect" ]; then
   cp -r "$SRC_DIR/bridge" "$SRC_DIR/ui" "$APP_DIR/"
   cp "$SRC_DIR"/monico-connect "$SRC_DIR"/monico-cmd "$SRC_DIR"/monico-model "$APP_DIR/"
+elif [ -n "${MONICO_SERVER:-}" ]; then
+  # Same WiFi, no internet needed: the Linux box serves a tarball of
+  # the exact code it runs at /linuxtomux.tar.gz.
+  base="${MONICO_SERVER%/}"
+  tmp="$(mktemp -d)"
+  curl -fsSL "$base/linuxtomux.tar.gz" | tar -xz -C "$tmp"
+  cp -r "$tmp/bridge" "$tmp/ui" "$APP_DIR/"
+  cp "$tmp"/monico-connect "$tmp"/monico-cmd "$tmp"/monico-model "$APP_DIR/"
+  rm -rf "$tmp"
 else
   REPO="${MONICO_REPO:-https://github.com/jaykk99/linuxtomux}"
   tmp="$(mktemp -d)"
@@ -53,7 +66,7 @@ cfg.chmod(0o600)
 print("Saved server + pairing key to ~/.monico-bridge/client.json (0600).")
 PY
 else
-  echo "No MONICO_SERVER / MONICO_TOKEN given; run monico-connect --server <url> --key <key> once."
+  echo "No MONICO_SERVER / MONICO_TOKEN given; run monico-connect with the server URL and pairing key printed by monico-server start."
 fi
 
 echo

@@ -1,6 +1,13 @@
 """Monico Labs bridge, Linux side.
 
-Run it:  monico-server start [--join http://<other-linux>:8765]
+Run it:  monico-server start [--join http://<other-linux>:8765] [--public]
+
+Add --public to expose the dashboard on the internet through a free
+Cloudflare quick tunnel (no account, no card): the public URL is
+printed once cloudflared reports it. Without --public the server is
+LAN-only; the phone on the same WiFi opens http://<linux-lan-ip>:8765/
+directly, no internet needed anywhere. The dashboard itself is behind
+a PIN gate (local URL and public URL alike).
 
 The Linux box listens; phones connect OUT to it (phones sit behind
 carrier NAT, so the phone always initiates). The phone keeps a
@@ -20,19 +27,27 @@ link returns, the next sync heals the list.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import http.client
 import json
 import queue
+import secrets
+import select
+import socket
 import threading
 import time
 import urllib.request
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .apps import APPS, AppProbe
-from .common import (DATA_DIR, KEY_FILE, VERSION, check_token,
-                     ensure_data_dir, get_or_create_key,
+from .common import (DATA_DIR, KEY_FILE, VERSION, blocked_reason,
+                     check_token, ensure_data_dir, get_or_create_key,
                      get_or_create_server_id, log, model_status,
                      run_command)
 from . import pools as poolmod
@@ -41,6 +56,24 @@ from .specs import clean_specs, live_specs
 
 UI_FILE = Path(__file__).resolve().parent.parent / "ui" / "homescreen.html"
 DASHBOARD_FILE = UI_FILE.parent / "dashboard.html"
+
+# PIN gate for the dashboard (/dashboard), which is also the public
+# URL when --public is on. Only the SHA-256 hash of the PIN is stored
+# here; the PIN itself is never in the repo, never printed, never
+# logged, and never appears in the dashboard HTML/JS. A successful PIN
+# login mints a random session token (12h cookie); the token, not the
+# PIN, is what the browser presents afterwards.
+PIN_HASH = "5daa4478509ac22f36329f620ac7e22dd140d5fad7ff710b6670f7329ac217f7"
+PIN_SESSION_TTL_S = 12 * 3600
+PIN_COOKIE = "monico_pin"
+PIN_HTML = """<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
+<title>Monico Labs - PIN</title><body style="font-family:system-ui;background:#0b0b0d;color:#f2f2f2;display:grid;place-items:center;min-height:100vh;margin:0">
+<form method="POST" action="/pin-login" style="text-align:center">
+<h1 style="letter-spacing:.2em">MONICO LABS</h1><p>Enter PIN</p>
+<input name="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" style="padding:12px;border-radius:10px;border:1px solid #333;background:#151517;color:#fff;text-align:center;letter-spacing:.3em">
+<button style="padding:12px 18px;border-radius:10px;border:0;background:#e8e8e8;font-weight:700">Enter</button>
+<p style="font-size:12px;color:#888">Pairing key instead? <a href="/login?next=/dashboard" style="color:#ccc">Sign in on the home page</a></p>
+</form></body>"""
 LOGIN_HTML = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Monico Labs — Bridge</title>
@@ -119,6 +152,9 @@ class Bridge:
         self.inflight: dict[str, int] = {}
         self.last_used: dict[str, int] = {}
         self._deal_seq = 0
+        # PIN sessions for the dashboard: token -> expiry epoch.
+        # In-memory only; a server restart logs everyone out.
+        self.pin_sessions: dict[str, float] = {}
 
     # -- device registry -------------------------------------------------
     def register(self, info: dict) -> dict:
@@ -515,6 +551,69 @@ class Bridge:
         if ev:
             ev.set()
 
+    # -- PIN gate (dashboard) --------------------------------------------
+    def pin_login(self, pin: str) -> str | None:
+        """Verify a PIN against the stored hash. Returns a random
+        session token on success, None on failure. The PIN is never
+        stored or logged; only its hash is compared, in constant time."""
+        try:
+            digest = hashlib.sha256(pin.encode()).hexdigest()
+        except Exception:
+            return None
+        if not hmac.compare_digest(digest, PIN_HASH):
+            return None
+        token = secrets.token_urlsafe(32)
+        with self.lock:
+            self.pin_sessions[token] = time.time() + PIN_SESSION_TTL_S
+        return token
+
+    def pin_authed(self, token: str | None) -> bool:
+        if not token:
+            return False
+        with self.lock:
+            exp = self.pin_sessions.get(token)
+            if exp is None:
+                return False
+            if exp < time.time():
+                del self.pin_sessions[token]
+                return False
+        return True
+
+    # -- shared terminal ---------------------------------------------------
+    def exec_all(self, command: str, timeout_s: float = 30) -> list[dict]:
+        """Run one command on every online device at once: this server
+        plus every online device in the mesh view, in parallel. Each
+        result carries its device id/name so the dashboard can label
+        the outputs. Reuses submit()/run_command(), so the
+        destructive-command guard applies exactly as for /api/exec. A
+        device that does not answer in time reports a timeout error
+        instead of holding up the rest."""
+        reason = blocked_reason(command)
+        if reason:
+            return [{"device_id": self.server_id, "name": self.name,
+                     "error": reason, "blocked": True}]
+        timeout_s = max(1, min(float(timeout_s or 30), 300))
+        targets: list[tuple[str, str, str]] = [("self", self.server_id, self.name)]
+        seen = {self.server_id}
+        for rec in self.device_list():
+            if not rec.get("online") or rec["device_id"] in seen:
+                continue
+            seen.add(rec["device_id"])
+            targets.append(("device", rec["device_id"],
+                            rec.get("name", rec["device_id"])))
+
+        def _run(kind: str, did: str, name: str) -> dict:
+            if kind == "self":
+                return {"device_id": did, "name": name,
+                        **run_command(command, timeout_s)}
+            res = self.submit(did, {"type": "exec", "command": command,
+                                    "timeout_s": timeout_s},
+                              wait_s=timeout_s + 15)
+            return {"device_id": did, "name": name, **res}
+
+        with ThreadPoolExecutor(max_workers=max(1, len(targets))) as pool:
+            return list(pool.map(lambda t: _run(*t), targets))
+
 
 BRIDGE = Bridge()
 
@@ -689,6 +788,141 @@ def make_handler():
                 return True
             return False
 
+        def _pin_authed(self) -> bool:
+            cookie = self.headers.get("Cookie", "")
+            for part in cookie.split(";"):
+                part = part.strip()
+                if part.startswith(PIN_COOKIE + "="):
+                    return BRIDGE.pin_authed(part.split("=", 1)[1])
+            return False
+
+        def _api_authed(self) -> bool:
+            """Dashboard API auth: the pairing key (full owner access)
+            or a valid PIN session (dashboard-only access)."""
+            return self._authed() or self._pin_authed()
+
+        def _proxy_authed(self) -> bool:
+            """Auth for the internet-sharing proxy: Proxy-Authorization
+            Basic (any username, pairing key as password) or the
+            X-Pair-Key header. The proxy never serves unauthenticated
+            strangers on the LAN."""
+            auth = self.headers.get("Proxy-Authorization", "")
+            if auth.startswith("Basic "):
+                try:
+                    decoded = base64.b64decode(auth[6:]).decode("utf-8", "replace")
+                    _user, _, password = decoded.partition(":")
+                    if check_token(password):
+                        return True
+                except Exception:
+                    pass
+            if check_token(self.headers.get("X-Pair-Key", "")):
+                return True
+            return False
+
+        def _relay(self, client, upstream) -> None:
+            """Blind byte relay between two sockets until either side
+            closes (CONNECT tunnel). Runs in the handler thread; the
+            server is threaded, so one tunnel does not block others."""
+            self.close_connection = True
+            for s in (client, upstream):
+                try:
+                    s.settimeout(300)
+                except Exception:
+                    pass
+
+            def _copy(src, dst):
+                try:
+                    while True:
+                        data = src.recv(65536)
+                        if not data:
+                            break
+                        dst.sendall(data)
+                except Exception:
+                    pass
+                finally:
+                    try:
+                        dst.shutdown(socket.SHUT_WR)
+                    except Exception:
+                        pass
+
+            t1 = threading.Thread(target=_copy, args=(client, upstream), daemon=True)
+            t2 = threading.Thread(target=_copy, args=(upstream, client), daemon=True)
+            t1.start()
+            t2.start()
+            t1.join()
+            t2.join()
+
+        def _proxy_http(self, method: str):
+            """Forward a plain-http absolute-URI request (phone's curl /
+            tools via the Linux box). HTTPS goes through CONNECT, not
+            here. Body capped at 50MB."""
+            if not self._proxy_authed():
+                return self._json(407, {"error": "proxy authentication required"},
+                                  {"Proxy-Authenticate": 'Basic realm="Monico Labs"'})
+            u = urlparse(self.path)
+            if u.scheme != "http" or not u.hostname:
+                return self._json(400, {"error": "proxy forwards http:// URLs; use CONNECT for https"})
+            n = int(self.headers.get("Content-Length") or 0)
+            body = self.rfile.read(n) if n else None
+            headers = {k: v for k, v in self.headers.items()
+                       if k.lower() not in ("host", "proxy-authorization",
+                                            "proxy-connection", "connection")}
+            try:
+                conn = http.client.HTTPConnection(u.hostname, u.port or 80, timeout=20)
+                path = u.path or "/"
+                if u.query:
+                    path += "?" + u.query
+                conn.request(method, path, body=body, headers=headers)
+                resp = conn.getresponse()
+                data = resp.read(50 * 1024 * 1024)
+                self.send_response(resp.status)
+                for k, v in resp.getheaders():
+                    if k.lower() not in ("connection", "transfer-encoding"):
+                        self.send_header(k, v)
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                if self.command != "HEAD":
+                    self.wfile.write(data)
+            except Exception as exc:
+                return self._json(502, {"error": f"proxy fetch failed: {exc}"})
+
+        def do_CONNECT(self):
+            """CONNECT tunnel for the internet-sharing proxy: the phone's
+            browser/tools open https (or any TCP) through the Linux box.
+            Pairing-key auth only; loopback targets are pointless
+            through a proxy but harmless, so nothing is special-cased."""
+            if not self._proxy_authed():
+                body = b"Proxy authentication required"
+                self.send_response(407)
+                self.send_header("Proxy-Authenticate", 'Basic realm="Monico Labs"')
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            hostport = self.path
+            if ":" in hostport:
+                host, _, port_s = hostport.rpartition(":")
+            else:
+                host, port_s = hostport, "443"
+            try:
+                port = int(port_s)
+            except ValueError:
+                return self._json(400, {"error": "bad CONNECT target"})
+            try:
+                upstream = socket.create_connection((host, port), timeout=15)
+            except Exception as exc:
+                return self._json(502, {"error": f"cannot connect to {host}:{port}: {exc}"})
+            try:
+                self.send_response(200, "Connection Established")
+                self.end_headers()
+                self._relay(self.connection, upstream)
+            finally:
+                try:
+                    upstream.close()
+                except Exception:
+                    pass
+
         # -- routes ---------------------------------------------------------
         def do_GET(self):
             u = urlparse(self.path)
@@ -706,31 +940,55 @@ def make_handler():
                 if script.exists():
                     return self._send(200, script.read_bytes(), "text/x-shellscript")
                 return self._json(404, {"error": "installer not found"})
+            if p == "/linuxtomux.tar.gz":
+                # Public: the tarball carries no secret. The phone
+                # downloads the exact code this server runs, no GitHub
+                # and no internet on the phone needed.
+                try:
+                    data = _repo_tarball_bytes()
+                except Exception as exc:
+                    return self._json(500, {"error": f"tarball build failed: {exc}"})
+                return self._send(200, data, "application/gzip",
+                                  {"Content-Disposition": 'attachment; filename="linuxtomux.tar.gz"'})
+            # Proxy-style absolute-URI request (phone via the Linux box):
+            # handled before any bridge route, normal requests never
+            # look like this.
+            if self.path.startswith("http://"):
+                return self._proxy_http("GET")
             if p == "/bridge/poll":
                 if not self._authed():
                     return self._json(401, {"error": "bad pairing key"})
                 qs = parse_qs(u.query)
                 did = (qs.get("device_id") or [""])[0]
                 return self._json(200, BRIDGE.poll(did))
+            if p in ("/dashboard", "/dashboard/"):
+                # Dashboard: PIN gate (public URL) or pairing key.
+                if self._pin_authed() or self._authed():
+                    html = (DASHBOARD_FILE.read_text() if DASHBOARD_FILE.exists()
+                            else "<h1>Monico Labs</h1><p>dashboard.html missing</p>")
+                    return self._send(200, html.encode(), "text/html; charset=utf-8")
+                return self._send(200, PIN_HTML.encode(), "text/html; charset=utf-8")
+            if p == "/specs":
+                # Old dashboard URL: redirect, don't break bookmarks.
+                return self._send(302, b"", "text/plain", {"Location": "/dashboard"})
+            if p == "/api/devices":
+                # Dashboard API: pairing key or PIN session.
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                return self._json(200, {"devices": BRIDGE.device_list()})
+            if p == "/api/pools":
+                # Dashboard API: pairing key or PIN session, like
+                # /api/devices above (the dashboard calls it).
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                return self._json(200, {"pools": BRIDGE.pool_list()})
             if not self._authed():
-                if p in ("/", "/dashboard", "/dashboard/"):
-                    login = LOGIN_HTML
-                    if p != "/":
-                        login = login.replace('action="/login"',
-                                              'action="/login?next=/dashboard"')
-                    return self._send(200, login.encode(), "text/html; charset=utf-8")
+                if p == "/":
+                    return self._send(200, LOGIN_HTML.encode(), "text/html; charset=utf-8")
                 return self._json(401, {"error": "owner key required"})
             if p == "/":
                 html = UI_FILE.read_text() if UI_FILE.exists() else "<h1>Monico Labs</h1>"
                 return self._send(200, html.encode(), "text/html; charset=utf-8")
-            if p in ("/dashboard", "/dashboard/"):
-                html = (DASHBOARD_FILE.read_text() if DASHBOARD_FILE.exists()
-                        else "<h1>Monico Labs</h1><p>dashboard.html missing</p>")
-                return self._send(200, html.encode(), "text/html; charset=utf-8")
-            if p == "/api/devices":
-                return self._json(200, {"devices": BRIDGE.device_list()})
-            if p == "/api/pools":
-                return self._json(200, {"pools": BRIDGE.pool_list()})
             if p == "/api/apps":
                 return self._json(200, {"apps": BRIDGE.app_list()})
             if p.startswith("/device/"):
@@ -752,6 +1010,10 @@ def make_handler():
         def do_POST(self):
             u = urlparse(self.path)
             p = u.path
+            # Proxy-style absolute-URI request (phone via the Linux box):
+            # the proxy does its own auth (407), so this runs first.
+            if self.path.startswith("http://"):
+                return self._proxy_http("POST")
             if p == "/login":
                 n = int(self.headers.get("Content-Length") or 0)
                 form = parse_qs(self.rfile.read(n).decode() if n else "")
@@ -764,6 +1026,57 @@ def make_handler():
                                       {"Location": nxt,
                                        "Set-Cookie": f"monico_key={key}; Path=/; HttpOnly; SameSite=Lax"})
                 return self._send(403, b"bad key", "text/plain")
+            if p == "/pin-login":
+                # Dashboard PIN gate: no pairing key needed, the PIN
+                # itself is the credential. Never logs the PIN.
+                n = int(self.headers.get("Content-Length") or 0)
+                form = parse_qs(self.rfile.read(n).decode() if n else "")
+                pin = (form.get("pin") or [""])[0]
+                token = BRIDGE.pin_login(pin)
+                if token:
+                    return self._send(303, b"", "text/plain",
+                                      {"Location": "/dashboard",
+                                       "Set-Cookie": f"{PIN_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax"})
+                err = PIN_HTML.replace("</form>", "<p style='color:#ff5a5a'>Wrong PIN. Try again.</p></form>")
+                return self._send(403, err.encode(), "text/html; charset=utf-8")
+            if p == "/api/exec-all":
+                # Shared terminal: pairing key or PIN session.
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                body = self._body()
+                cmd = body.get("command", "")
+                if not cmd:
+                    return self._json(400, {"error": "command required"})
+                results = BRIDGE.exec_all(cmd, body.get("timeout_s", 30))
+                log(f"exec-all cmd={cmd!r} -> {len(results)} devices")
+                return self._json(200, {"results": results})
+            if p == "/api/pools":
+                # Dashboard pools: pairing key or PIN session, like
+                # /api/exec-all (the dashboard calls these).
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                body = self._body()
+                res = BRIDGE.pool_create(body.get("name", ""),
+                                         body.get("members") or [])
+                return self._json(400 if "error" in res else 200, res)
+            if p == "/api/pools/delete":
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                body = self._body()
+                res = BRIDGE.pool_delete(body.get("id", ""))
+                return self._json(404 if "error" in res else 200, res)
+            if p == "/api/pool-exec":
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                body = self._body()
+                cmds = body.get("commands")
+                if not isinstance(cmds, list):
+                    cmds = [body.get("command", "")]
+                res = BRIDGE.pool_exec(body.get("pool", ""),
+                                       [str(c) for c in cmds],
+                                       mode=body.get("mode", "split"),
+                                       timeout_s=float(body.get("timeout_s", 60)))
+                return self._json(400 if "error" in res else 200, res)
             if not self._authed():
                 return self._json(401, {"error": "bad pairing key"})
             body = self._body()
@@ -793,22 +1106,6 @@ def make_handler():
             if p == "/bridge/result":
                 BRIDGE.complete(body.get("id", ""), body.get("result", {}))
                 return self._json(200, {"ok": True})
-            if p == "/api/pools":
-                res = BRIDGE.pool_create(body.get("name", ""),
-                                         body.get("members") or [])
-                return self._json(400 if "error" in res else 200, res)
-            if p == "/api/pools/delete":
-                res = BRIDGE.pool_delete(body.get("id", ""))
-                return self._json(404 if "error" in res else 200, res)
-            if p == "/api/pool-exec":
-                cmds = body.get("commands")
-                if not isinstance(cmds, list):
-                    cmds = [body.get("command", "")]
-                res = BRIDGE.pool_exec(body.get("pool", ""),
-                                       [str(c) for c in cmds],
-                                       mode=body.get("mode", "split"),
-                                       timeout_s=float(body.get("timeout_s", 60)))
-                return self._json(400 if "error" in res else 200, res)
             if p == "/api/exec":
                 target = body.get("target", "linux")
                 cmd = body.get("command", "")
@@ -825,8 +1122,57 @@ def make_handler():
     return H
 
 
+def _lan_ip() -> str | None:
+    """This box's LAN address (for the phone on the same WiFi). The
+    UDP-connect trick discovers the outbound interface without
+    sending any traffic."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip if not ip.startswith("127.") else None
+    except Exception:
+        return None
+
+
+def _termux_connect_block(lan_ip: str | None, port: int, key: str) -> str:
+    """The ready-to-paste Termux block printed at startup: the real LAN
+    IP and the real pairing key, no placeholders. Empty when there is
+    no LAN address (nothing to paste yet). The curl line fetches the
+    installer from this box itself, so it works with no internet on
+    the phone as long as it is on the same WiFi."""
+    if not lan_ip:
+        return ""
+    base = f"http://{lan_ip}:{port}"
+    return (
+        "Run this on your phone (Termux):\n"
+        f"  curl -fsSL {base}/install-termux.sh | "
+        f"MONICO_SERVER={base} MONICO_TOKEN={key} bash\n"
+        "  monico-connect"
+    )
+
+
+def _repo_tarball_bytes() -> bytes:
+    """Gzipped tar of the files install-termux.sh needs (bridge/, ui/,
+    the launchers, the installer itself), built from this checkout so
+    the phone gets the exact code this server runs. No GitHub, no
+    internet on the phone."""
+    import io
+    import tarfile
+    root = Path(__file__).resolve().parent.parent
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+        for rel in ("bridge", "ui"):
+            tf.add(root / rel, arcname=rel)
+        for name in ("monico-connect", "monico-cmd", "monico-model",
+                     "install-termux.sh"):
+            tf.add(root / name, arcname=name)
+    return buf.getvalue()
+
+
 def serve(port: int, join_url: str | None = None, join_key: str | None = None,
-          name: str | None = None) -> None:
+          name: str | None = None, public: bool = False) -> None:
     global BRIDGE
     if join_key and not KEY_FILE.exists():
         # First run on this box: adopt the mesh pairing key as our own
@@ -845,10 +1191,32 @@ def serve(port: int, join_url: str | None = None, join_key: str | None = None,
     print(f"MONICO LABS BRIDGE server v{VERSION}", flush=True)
     print(f"Server:      {BRIDGE.name} ({BRIDGE.server_id})", flush=True)
     print(f"Homescreen:  http://127.0.0.1:{port}/", flush=True)
+    print(f"Dashboard:   http://127.0.0.1:{port}/dashboard", flush=True)
     if is_new:
         print(f"Pairing key (shown once, saved 0600): {key}", flush=True)
     else:
         print(f"Pairing key: saved in {DATA_DIR}/pairing-key (0600)", flush=True)
+    lan = _lan_ip()
+    if lan:
+        print(f"LAN dashboard: http://{lan}:{port}/dashboard (same WiFi, no internet needed)", flush=True)
+        print(_termux_connect_block(lan, port, key), flush=True)
+    else:
+        print("No LAN address found: connect this box to WiFi to get the phone command.", flush=True)
+    tunnel_proc = None
+    if public:
+        from .tunnel import (CLOUDFLARED_INSTALL_NOTE, find_cloudflared,
+                             start_quick_tunnel)
+        if not find_cloudflared():
+            print(CLOUDFLARED_INSTALL_NOTE, flush=True)
+        else:
+            print("Starting Cloudflare quick tunnel (free, no account)...", flush=True)
+
+            def _got(url: str) -> None:
+                print(f"Public dashboard: {url}/dashboard", flush=True)
+                print(f"Public home:   {url}/", flush=True)
+                log(f"public tunnel up: {url}")
+
+            tunnel_proc = start_quick_tunnel(port, _got)
     if join_url:
         token = join_key or key
         link = PeerLink(BRIDGE, join_url, token, port)
@@ -857,11 +1225,15 @@ def serve(port: int, join_url: str | None = None, join_key: str | None = None,
     else:
         print("Waiting for devices to connect with monico-connect.", flush=True)
     print("=" * 60, flush=True)
-    log(f"server start on :{port} id={BRIDGE.server_id} join={join_url or '-'}")
+    log(f"server start on :{port} id={BRIDGE.server_id} join={join_url or '-'} public={public}")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         pass
+    finally:
+        if tunnel_proc is not None:
+            from .tunnel import stop_tunnel
+            stop_tunnel(tunnel_proc)
 
 
 def token_add(token: str) -> None:

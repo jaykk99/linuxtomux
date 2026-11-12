@@ -8,7 +8,11 @@ builds, nothing to pay for, no keys to buy.
 
 ## Install
 
-**Linux** (the server side; do this first, it hands you the pairing key):
+Two steps, no placeholders. The Linux box prints the exact command
+the phone needs, with the real address and the real pairing key
+already filled in. Copy it, run it, they are connected.
+
+**Step 1 — Linux** (the server side; do this first):
 
 ```sh
 git clone https://github.com/jaykk99/linuxtomux.git
@@ -20,52 +24,55 @@ monico-server start
 `install-linux.sh` copies the app to `~/.monico-bridge/app` and puts
 `monico-server`, `monico-cmd`, and `monico-model` in `~/.local/bin`
 (make sure that is on your PATH). `monico-server start` prints the
-pairing key once; the Termux install below needs it, plus this
-machine's address.
-
-**Finding the Linux box's address (read this first):** every
-`<linux-host>` below means the Linux machine's real IP address on
-your network. Get it ON THE LINUX BOX by running:
+pairing key once (saved at `~/.monico-bridge/pairing-key`, 0600) and
+then a block like this, with your real numbers in it:
 
 ```sh
-hostname -I
+Run this on your phone (Termux):
+  curl -fsSL http://192.168.1.23:8765/install-termux.sh | MONICO_SERVER=http://192.168.1.23:8765 MONICO_TOKEN=abc123-your-real-key bash
+  monico-connect
 ```
 
-Use the FIRST address it prints (for example `192.168.1.23`). Type
-the real address with NO angle brackets: write
-`http://192.168.1.23:8765`, never `http://<192.168.1.23>:8765` and
-never the literal word `<linux-host>`. Same for `<pairing key>`:
-paste the actual key the server printed, brackets off. Leaving the
-brackets or the placeholder words in is the one mistake that breaks
-the install.
+(The numbers above are a worked example, clearly fake. The block
+your server prints has your box's real LAN address and your real
+key. It prints the block on every start, even when the key was
+already saved, so you never have to go looking for it.)
 
-Worked example (fake numbers, real shape):
+**Step 2 — Termux** (the phone side): copy the block from step 1
+and run it on the phone. That is the whole install: it puts
+`monico-connect`, `monico-cmd`, and `monico-model` in `$PREFIX/bin`
+and saves the server + pairing key to
+`~/.monico-bridge/client.json` (0600). Then `monico-connect` is the
+phone's one command: the phone connects OUT to the Linux box and
+stays connected.
+
+**Step 3 — check they are connected.** On the Linux box, open the
+dashboard address the server printed (same WiFi) and enter the PIN:
+the phone shows up as a card with its live RAM, storage, CPU, and
+battery. Or from either side, run a command on the other:
 
 ```sh
-MONICO_SERVER=http://192.168.1.23:8765 MONICO_TOKEN=abc123-your-real-key ./install-termux.sh
+monico-cmd phone 'uname -a'     # from Linux, runs on the phone
+monico-cmd linux 'uname -a'     # from the phone, runs on Linux
 ```
 
-**Termux** (the phone side):
+**No internet on the phone?** The printed command fetches the
+installer AND the app files from the Linux box itself
+(`/linuxtomux.tar.gz`), so it works with no internet on the phone
+as long as it is on the same WiFi. The clone route below is the
+fallback for a phone that is not on the same network yet (it needs
+internet for the `git clone` only):
 
 ```sh
 pkg install python git
 git clone https://github.com/jaykk99/linuxtomux.git
 cd linuxtomux
-MONICO_SERVER=http://<linux-host>:8765 MONICO_TOKEN=<pairing key> ./install-termux.sh
+MONICO_SERVER=http://192.168.1.23:8765 MONICO_TOKEN=abc123-your-real-key ./install-termux.sh
 monico-connect
 ```
 
-That puts `monico-connect`, `monico-cmd`, and `monico-model` in
-`$PREFIX/bin` and saves the server + pairing key to
-`~/.monico-bridge/client.json` (0600). Once the Linux server is already
-running, the shortcut is one line from the phone:
-
-```sh
-curl -fsSL http://<linux-host>:8765/install-termux.sh | MONICO_SERVER=http://<linux-host>:8765 MONICO_TOKEN=<pairing key> bash
-```
-
-(The shortcut re-downloads the app from GitHub, so the clone route
-above is the one that works fully offline of GitHub.)
+Use the address and key from your server's startup output in place
+of the example numbers above.
 
 **The model, both sides** (optional, uncensored, biggest the device
 can run):
@@ -82,15 +89,13 @@ monico-model install
 monico-server start
 ```
 
-It prints a pairing key once (saved at `~/.monico-bridge/pairing-key`,
-0600) and starts listening. The homescreen lives at
-`http://<linux-host>:8765/`.
+It prints the pairing key once (saved at `~/.monico-bridge/pairing-key`,
+0600), prints the ready-to-paste Termux command, and starts
+listening. The homescreen lives at the address the server prints.
 
-**On the phone (Termux):**
+**On the phone (Termux):** run the block the server printed, then:
 
 ```sh
-pkg install python git
-curl -fsSL http://<linux-host>:8765/install-termux.sh | MONICO_SERVER=http://<linux-host>:8765 MONICO_TOKEN=<pairing key> bash
 monico-connect
 ```
 
@@ -100,9 +105,9 @@ server too: its commands, its status page, and its hosted files are
 reachable through the bridge.
 
 Run `./install-linux.sh` once on the Linux box to put `monico-server`,
-`monico-cmd`, and `monico-model` in `~/.local/bin`. Run
-`install-termux.sh` (or the curl line above) once on the phone for
-`monico-connect`, `monico-cmd`, and `monico-model` in `$PREFIX/bin`.
+`monico-cmd`, and `monico-model` in `~/.local/bin`. Run the printed
+Termux block once on the phone for `monico-connect`, `monico-cmd`,
+and `monico-model` in `$PREFIX/bin`.
 
 ## Why the phone connects out
 
@@ -153,11 +158,12 @@ monico-cmd galaxy-s22 'termux-battery-status'
 
 **More Linux boxes**: start the second server with `--join` pointing
 at the first (same pairing key everywhere; pass it once with `--key`
-and that box adopts it as its own):
+and that box adopts it as its own). Use the address and key from the
+first server's startup output; the numbers here are an example:
 
 ```sh
 # on linux-b, joining the server already running on linux-a
-monico-server start --name linux-b --join http://<linux-a>:8765 --key <pairing key>
+monico-server start --name linux-b --join http://192.168.1.23:8765 --key abc123-your-real-key
 ```
 
 From that moment both servers carry the SAME device list: their own
@@ -195,8 +201,9 @@ entirely and just run `monico-connect` against any mesh server.
 
 ## Homescreen (Monico Labs hosting)
 
-Open `http://<linux-host>:8765/` and enter the pairing key once (it is
-kept as a cookie after that). Big phone-friendly tiles show:
+Open the homescreen address the server prints at startup and enter
+the pairing key once (it is kept as a cookie after that). Big
+phone-friendly tiles show:
 
 - **Connected devices**: Linux box + every connected Termux device,
   live online/offline status, hardware summary.
@@ -209,9 +216,9 @@ kept as a cookie after that). Big phone-friendly tiles show:
 
 ## Dashboard (live specs, every device)
 
-Open `http://<linux-host>:8765/dashboard` (or tap **Dashboard** on the
-homescreen; same pairing key). One page, one card per device in the
-mesh, Termux phones and Linux boxes alike:
+Open the dashboard address the server prints at startup (or tap
+**Dashboard** on the homescreen; same pairing key). One page, one card
+per device in the mesh, Termux phones and Linux boxes alike:
 
 - **RAM** and **storage** as bars (used / total, percent; one storage
   bar per drive, so a mounted USB drive gets its own).
@@ -240,6 +247,43 @@ yet" note: `git pull`, re-run the installer, restart
 `/api/devices` under each device's `specs` (shape documented in
 `bridge/specs.py`). `MONICO_SPECS_INTERVAL=<seconds>` changes how
 often a device reports.
+
+## Public URL (--public)
+
+The dashboard works from anywhere, not just the local network:
+
+```sh
+monico-server start --public
+```
+
+That launches a free Cloudflare quick tunnel (no account, no card)
+and prints a public `https://<name>.trycloudflare.com/dashboard`
+URL. The phone opens that URL from anywhere. If `cloudflared` is not
+installed, the server says so plainly and prints the one install
+command instead of failing silently.
+
+A durable URL on your own Cloudflare account (named tunnel) is the
+follow-up, not built here: it needs `cloudflared tunnel login`, a
+tunnel, and a DNS record on your account.
+
+## PIN gate
+
+The dashboard is behind a PIN entry page, local URL and public URL
+alike. Only the SHA-256 hash of the PIN lives in the code; the PIN
+itself is never in the repo, never printed, and never logged. A
+correct PIN sets a 12-hour session cookie. The pairing key still
+opens everything, including the dashboard API (sign in with it on
+the home page and the dashboard opens too).
+
+## Shared terminal
+
+The dashboard has a terminal pane: one command typed there runs on
+every online device at the same time (this server plus every online
+phone/Linux box in the mesh) and shows each device's output labeled,
+like the two machines are one machine. It uses
+`POST /api/exec-all`, which fans out through the existing `/api/exec`
+relay path with the same destructive-command guard. Behind the same
+PIN gate.
 
 ## Paired devices (two devices as one)
 
@@ -275,6 +319,44 @@ one command to the next (it may land on the other device): chain
 with `&&` on one line. Pairs are saved on the server they were made
 on (`~/.monico-bridge/pools.json`) and can include devices from any
 server in the mesh. Rules live in `bridge/pools.py`.
+
+## No internet on the phone (offline-first)
+
+The control channel needs no internet on the phone at all: register,
+specs, sync, and the shared terminal are plain HTTP from the phone
+to the Linux box, no DNS and no cloud service involved.
+
+- **Same WiFi (primary):** the phone opens the Linux box directly at
+  its LAN address. The server prints the LAN dashboard URL and the
+  ready-to-paste Termux command at startup. No internet needed on
+  either side for the dashboard, terminal, or commands.
+- **USB (fallback, no shared WiFi):** plug the phone in and run
+  `adb reverse tcp:8765 tcp:8765` on the Linux box; the phone then
+  reaches the server at `http://127.0.0.1:8765`. Documented, not
+  live-verified here (no Android device on this box to test against).
+- **Hotspot (fallback):** a WiFi hotspot from either side puts both
+  on the same LAN, and the same-WiFi route above applies. Also
+  documented, not live-verified here.
+
+When the phone DOES need the internet (opening the public Cloudflare
+dashboard URL, downloading anything), it goes through the Linux box:
+the bridge server is also a small HTTP proxy on the same port
+(CONNECT for https, plain forwarding for http). In Termux, point the
+proxy at the Linux box's LAN address from the server's startup
+output, with the pairing key as the password:
+
+```sh
+export http_proxy=http://monico:PAIRING_KEY_FROM_SERVER_STARTUP@LAN_ADDRESS_FROM_SERVER_STARTUP:8765
+export https_proxy=$http_proxy
+export no_proxy=127.0.0.1,localhost,LAN_ADDRESS_FROM_SERVER_STARTUP
+```
+
+That covers `curl`, `wget`, `pkg`, and anything else that honors
+proxy env vars. The proxy needs the pairing key (Basic auth, key as
+password), so a stranger on the WiFi cannot use it. A phone browser
+can use it too via manual proxy settings (Firefox Android prompts
+for the proxy password). The dashboard page itself is one small
+self-contained file with no CDN, so it stays light through the proxy.
 
 ## Optional model installer (uncensored, on-device)
 
@@ -348,6 +430,7 @@ monico-server / monico-connect / monico-cmd / monico-model   commands
 bridge/server.py     Linux side: registry, mesh sync, relay, homescreen
 bridge/client.py     Termux side: channel + the phone's hosted service
 bridge/cli.py        command-line entry points
+bridge/tunnel.py     Cloudflare quick tunnel for --public
 bridge/specs.py      live specs each device reports (RAM, storage, CPU, OS, uptime, battery)
 bridge/model_installer.py + hwdetect.py   hardware tiers, installer
 ui/homescreen.html   the Monico Labs homescreen
