@@ -9,11 +9,13 @@ curl -fsSL <site>/install.sh | TERMUX_CODE_GATEWAY=<site> TERMUX_CODE_TOKEN=<tok
 termux-code
 ```
 
-The bridge rides the exact same pattern, with the SAME token:
+The bridge rides the exact same pattern, with the SAME token. The
+Linux box prints the exact command at startup, real address and key
+already filled in (see the main README's Install section); copy that
+block and run it on the phone:
 
 ```
-pkg install python git
-curl -fsSL <bridge>/install-termux.sh | MONICO_SERVER=<bridge> MONICO_TOKEN=<token> bash
+curl -fsSL http://LAN_ADDRESS_FROM_SERVER_STARTUP:8765/install-termux.sh | MONICO_SERVER=http://LAN_ADDRESS_FROM_SERVER_STARTUP:8765 MONICO_TOKEN=PAIRING_KEY_FROM_SERVER_STARTUP bash
 monico-connect
 ```
 

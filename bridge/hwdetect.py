@@ -48,6 +48,21 @@ def _gpu() -> str:
 
 
 def detect() -> dict:
+    """Base hardware facts. Never raises: on a stripped or odd box the
+    caller gets zeros/empties, not a crash (Bridge and Client both call
+    this at startup)."""
+    try:
+        return _detect_inner()
+    except Exception:
+        return {"platform": "linux" if not is_termux() else "android-termux",
+                "device_model": "", "arch": platform.machine(),
+                "cpu_cores": os.cpu_count() or 1, "ram_total_gb": 0,
+                "ram_available_gb": 0, "disk_free_gb": 0,
+                "gpu": "none detected (CPU inference)",
+                "hostname": platform.node()}
+
+
+def _detect_inner() -> dict:
     mem = _meminfo()
     total_kb = mem.get("MemTotal", 0)
     avail_kb = mem.get("MemAvailable", 0)

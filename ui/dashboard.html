@@ -155,6 +155,13 @@
   .pair .acts{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
   .pair .msg{font-family:var(--mono);font-size:11px;color:var(--bad-t)}
   .pair .help{margin:10px 0 14px;font-size:12px;line-height:1.5;color:var(--mut);max-width:640px}
+  .term-row{display:flex;gap:8px;margin-top:4px}
+  .term-row input{flex:1;min-width:0;height:40px;border:1px solid var(--line2);border-radius:8px;background:#0a0a0a;padding:0 12px;font-family:var(--mono);font-size:12px;color:var(--strong)}
+  .term-row input:focus{border-color:var(--line3);outline:none}
+  .term-h{margin-top:14px;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--dim)}
+  /* Shared terminal (all devices at once). Named term-all, not
+     term-out: the pool terminals below already own .term-out. */
+  .term-all pre{margin:6px 0 0;background:#0a0a0a;border:1px solid var(--line);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:12px;line-height:1.55;color:var(--txt);white-space:pre-wrap;word-break:break-word;max-height:300px;overflow:auto}
   footer{max-width:1280px;margin:0 auto;padding:0 16px 32px;font-family:var(--mono);font-size:11px;color:var(--faint)}
   @media(min-width:768px){footer{padding:0 32px 32px}}
   @media(prefers-reduced-motion:reduce){.track i{transition:none}}
@@ -211,6 +218,18 @@
         <div class="acts"><button class="btn primary sm" id="pair-go" onclick="createPool()">Pair them</button><button class="btn secondary sm" onclick="togglePair(false)">Cancel</button><span class="msg" id="pair-msg"></span></div>
       </div>
       <div class="grid" id="cards"><div class="card"><div class="empty-note">Loading devices...</div></div></div>
+    </div>
+  </div>
+  <div class="panel" style="margin-top:20px">
+    <div class="panel-h">
+      <div><h3>Shared terminal</h3><p>One command, every online device answers at once, each output labeled. The same destructive-command guard as the bridge applies.</p></div>
+    </div>
+    <div class="panel-b">
+      <div class="term-row">
+        <input id="cmd" type="text" placeholder="echo hello from all devices" onkeydown="if(event.key==='Enter')runAll()">
+        <button class="btn primary" onclick="runAll()">Run on all</button>
+      </div>
+      <div class="term-all" id="term-out"></div>
     </div>
   </div>
 </main>
@@ -524,6 +543,24 @@ async function load(){
     setBadge(on?"ok":"bad", on ? on+" online · live" : "All offline");
   }catch(e){
     setBadge("bad", lastOk ? "Server unreachable" : "Cannot load");
+  }
+}
+async function runAll(){
+  var cmd=document.getElementById("cmd").value.trim();
+  if(!cmd) return;
+  var out=document.getElementById("term-out");
+  out.innerHTML='<div class="empty-note">Running on all online devices...</div>';
+  try{
+    var r=await fetch("/api/exec-all",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({command:cmd,timeout_s:30})});
+    if(r.status===401){ location.href="/dashboard"; return; }
+    var data=await r.json();
+    if(!r.ok){ out.innerHTML='<div class="empty-note">Error: '+esc(data.error||r.status)+'</div>'; return; }
+    out.innerHTML=(data.results||[]).map(function(res){
+      var body=res.error?("ERROR: "+esc(res.error)):(esc(res.stdout||"")+(res.stderr?"\n--- stderr ---\n"+esc(res.stderr):""));
+      return '<div class="term-h">'+esc(res.name||res.device_id)+' · exit '+(res.exit_code==null?"?":res.exit_code)+'</div><pre>'+(body||"(no output)")+'</pre>';
+    }).join("")||'<div class="empty-note">No devices answered.</div>';
+  }catch(e){
+    out.innerHTML='<div class="empty-note">Request failed: '+esc(e.message)+'</div>';
   }
 }
 load();

@@ -1,7 +1,7 @@
 """Command line entry points.
 
 Linux side:   monico-server start [--port N] [--join URL] [--key KEY]
-                                  [--name NAME] | token-add <token> | key
+                                  [--name NAME] [--public] | token-add <token> | key
 Termux side:  monico-connect [--server URL] [--key KEY] [--name NAME]
 Both sides:   monico-cmd <linux|phone|device-name|device-id> <command...>
               monico-model install [--device this|both] [--dry-run] [--profile NAME]
@@ -222,7 +222,7 @@ def server_main(argv: list[str]) -> int:
             return argv[argv.index(flag) + 1] if flag in argv else None
         port = int(opt("--port") or DEFAULT_PORT)
         srv.serve(port, join_url=opt("--join"), join_key=opt("--key"),
-                  name=opt("--name"))
+                  name=opt("--name"), public=("--public" in argv))
         return 0
     if argv[0] == "key":
         key, is_new = get_or_create_key()
@@ -232,7 +232,7 @@ def server_main(argv: list[str]) -> int:
         srv.token_add(argv[1])
         return 0
     print("usage: monico-server start [--port N] [--join URL] [--key KEY] "
-          "[--name NAME] | key | token-add <token>")
+          "[--name NAME] [--public] | key | token-add <token>")
     return 2
 
 
