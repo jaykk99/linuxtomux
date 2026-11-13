@@ -638,6 +638,9 @@ class Bridge:
 
 
 BRIDGE = Bridge()
+# Short-lived phone pairing code: {"code", "key", "expires", "attempts"}.
+# Set at serve() start; the /pair route redeems it exactly once.
+PAIR_STATE: dict = {"code": None, "key": None, "expires": 0.0, "attempts": 0}
 
 
 # ----------------------------------------------------------------------
@@ -1017,13 +1020,24 @@ def make_handler():
                                         "server_id": BRIDGE.server_id,
                                         "name": BRIDGE.name,
                                         "uptime_s": int(time.time() - BRIDGE.started)})
-            if p == "/install-termux.sh":
+            if p in ("/install-termux.sh", "/i"):
                 # Public, like termux-code's install.sh: the script itself
-                # carries no secret; the pairing key arrives via env.
+                # carries no secret; the pairing key arrives via env or
+                # via a /pair code exchange. /i is a short alias kept
+                # for the old one-line install; the normal flow now
+                # installs from the repo and connects with monico-connect.
                 script = UI_FILE.parent.parent / "install-termux.sh"
                 if script.exists():
                     return self._send(200, script.read_bytes(), "text/x-shellscript")
                 return self._json(404, {"error": "installer not found"})
+            if p == "/pair":
+                # Exchange a short-lived pairing code for the pairing
+                # key, once. No key without a current code.
+                qs = parse_qs(urlparse(self.path).query)
+                key = _redeem_pair_code((qs.get("code") or [""])[0])
+                if key is None:
+                    return self._json(403, {"error": "bad or expired pair code"})
+                return self._json(200, {"key": key})
             if p == "/linuxtomux.tar.gz":
                 # Public: the tarball carries no secret. The phone
                 # downloads the exact code this server runs, no GitHub
@@ -1157,6 +1171,14 @@ def make_handler():
                                        "Set-Cookie": f"{PIN_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax"})
                 err = PIN_HTML.replace("</form>", "<p style='color:#ff5a5a'>Wrong PIN. Try again.</p></form>")
                 return self._send(403, err.encode(), "text/html; charset=utf-8")
+            if p == "/pair-new":
+                # Mint a fresh 4-digit code for a running server (the
+                # `monico-pair` command). Pairing-key auth only; the
+                # code itself is the only thing returned, never the key.
+                if not self._authed():
+                    return self._json(401, {"error": "bad pairing key"})
+                key, _ = get_or_create_key()
+                return self._json(200, {"code": _new_pair_code(key)})
             if p == "/api/exec-all":
                 # Shared terminal: pairing key or PIN session.
                 if not self._api_authed():
@@ -1327,20 +1349,68 @@ def _lan_ip() -> str | None:
         return None
 
 
-def _termux_connect_block(lan_ip: str | None, port: int, key: str) -> str:
-    """The ready-to-paste Termux block printed at startup: the real LAN
-    IP and the real pairing key, no placeholders. Empty when there is
-    no LAN address (nothing to paste yet). The curl line fetches the
-    installer from this box itself, so it works with no internet on
-    the phone as long as it is on the same WiFi."""
-    if not lan_ip:
-        return ""
-    base = f"http://{lan_ip}:{port}"
+def _new_pair_code(key: str) -> str:
+    """One short-lived pairing code for the phone: 4 digits, single
+    use, 10 minutes. The code is short enough to read off the Linux
+    screen and type on the phone; it only gates one exchange for the
+    pairing key, which stays the strong secret. Wrong guesses are
+    counted; after 5 the code dies and a fresh one is minted with
+    `monico-pair` (or a server restart)."""
+    import random
+    PAIR_STATE.update({
+        "code": f"{random.randint(0, 9999):04d}",
+        "key": key,
+        "expires": time.time() + 600,
+        "attempts": 0,
+    })
+    return PAIR_STATE["code"]
+
+
+def _check_pair_code(code: str) -> bool:
+    """Is this code the live one, without consuming it? Discovery
+    uses this so a phone can find the server before redeeming; the
+    code is only spent by _redeem_pair_code."""
+    if not code or PAIR_STATE.get("code") is None:
+        return False
+    if time.time() > PAIR_STATE.get("expires", 0):
+        PAIR_STATE["code"] = None
+        return False
+    return code == PAIR_STATE["code"]
+
+
+def _redeem_pair_code(code: str) -> str | None:
+    """Return the pairing key for a valid code (consumed on success),
+    else None. A wrong code counts against the 5-guess budget."""
+    if not _check_pair_code(code):
+        if PAIR_STATE.get("code") is not None and code:
+            PAIR_STATE["attempts"] = PAIR_STATE.get("attempts", 0) + 1
+            if PAIR_STATE["attempts"] >= 5:
+                PAIR_STATE["code"] = None
+                print("Pair code locked out after 5 wrong guesses; "
+                      "run monico-pair for a fresh code.", flush=True)
+        return None
+    PAIR_STATE["code"] = None
+    return PAIR_STATE.get("key")
+
+
+def _pair_code_block(port: int, code: str) -> str:
+    """The pairing block printed at startup: a 4-digit code big and
+    clear, plus the two phone install commands and the connect
+    instruction. No IP, no key, no pasted command: the phone finds
+    this server on the local network by itself after the code is
+    typed into `monico-connect`."""
     return (
-        "Run this on your phone (Termux):\n"
-        f"  curl -fsSL {base}/install-termux.sh | "
-        f"MONICO_SERVER={base} MONICO_TOKEN={key} bash\n"
-        "  monico-connect"
+        "\n"
+        "  ===============================\n"
+        f"   YOUR 4-DIGIT CODE:  {code}\n"
+        "  ===============================\n"
+        "  (valid 10 minutes, one use; run monico-pair for a fresh one)\n"
+        "\n"
+        "  On your phone (Termux), install the repo, then connect:\n"
+        "    git clone https://github.com/jaykk99/linuxtomux.git\n"
+        "    cd linuxtomux && ./install-termux.sh\n"
+        "    monico-connect\n"
+        "  Type the code above when it asks. No IP to type."
     )
 
 
@@ -1368,6 +1438,88 @@ def _repo_tarball_signature(root: Path) -> tuple:
             st = f.stat()
             sig.append((name, st.st_mtime_ns, st.st_size))
     return tuple(sig)
+
+
+DISCOVERY_UDP_PORT = 18766  # phone broadcasts here to find a server
+
+
+def _discovery_reply_ip(sender: tuple[str, int]) -> str | None:
+    """This box's address as seen from the sender's network: a UDP
+    connect to the sender picks the outbound interface without
+    sending any traffic, so the reply carries an address the phone
+    can actually reach (loopback when the phone is on this box)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(sender)
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return None
+
+
+def _handle_discovery_packet(data: bytes, addr: tuple[str, int],
+                             http_port: int) -> bytes | None:
+    """One discovery packet in, one reply out (or None for silence).
+    Pure packet logic, split out so tests can prove it without a
+    working UDP socket: only a live code gets a reply, wrong codes,
+    wrong types, and garbage get silence (no guessing oracle), and
+    discovery never spends the code (GET /pair does that)."""
+    try:
+        msg = json.loads(data.decode("utf-8", "replace"))
+    except Exception:
+        return None
+    if not isinstance(msg, dict) or msg.get("type") != "monico-discover":
+        return None
+    if not _check_pair_code(str(msg.get("code") or "")):
+        return None
+    ip = _discovery_reply_ip(addr)
+    if not ip:
+        return None
+    return json.dumps({
+        "type": "monico-here",
+        "server": f"http://{ip}:{http_port}",
+        "name": BRIDGE.name,
+        "id": BRIDGE.server_id,
+    }).encode()
+
+
+def _start_discovery_listener(http_port: int,
+                             udp_port: int = DISCOVERY_UDP_PORT) -> socket.socket | None:
+    """UDP listener so a phone finds this server with no IP typed.
+    A phone broadcasts {"type": "monico-discover", "code": "1234"};
+    only a live code gets a reply, {"type": "monico-here", "server":
+    "http://<ip>:<port>", "name": ..., "id": ...}. Wrong codes get
+    silence (no guessing oracle), and discovery never spends the
+    code: the phone still redeems it once at GET /pair. A bind
+    failure (two servers on one box) only disables discovery; the
+    server itself keeps running."""
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("0.0.0.0", udp_port))
+    except Exception as exc:
+        print(f"Monico bridge: discovery off (UDP :{udp_port} busy: {exc}). "
+              "Phones can still connect with monico-connect --server <url>.",
+              flush=True)
+        return None
+
+    def loop() -> None:
+        while True:
+            try:
+                data, addr = sock.recvfrom(1024)
+            except OSError:
+                return  # socket closed: the listener is done
+            reply = _handle_discovery_packet(data, addr, http_port)
+            if reply is None:
+                continue
+            try:
+                sock.sendto(reply, addr)
+            except OSError:
+                continue
+
+    threading.Thread(target=loop, daemon=True).start()
+    return sock
 
 
 def _repo_tarball_bytes() -> bytes:
@@ -1432,9 +1584,11 @@ def serve(port: int, join_url: str | None = None, join_key: str | None = None,
     lan = _lan_ip()
     if lan:
         print(f"LAN dashboard: http://{lan}:{port}/dashboard (same WiFi, no internet needed)", flush=True)
-        print(_termux_connect_block(lan, port, key), flush=True)
     else:
-        print("No LAN address found: connect this box to WiFi to get the phone command.", flush=True)
+        print("No LAN address found: the phone can still find this server "
+              "on the local network with the code below.", flush=True)
+    print(_pair_code_block(port, _new_pair_code(key)), flush=True)
+    _start_discovery_listener(port)
     tunnel_proc = None
     if public:
         from .tunnel import (CLOUDFLARED_INSTALL_NOTE, find_cloudflared,

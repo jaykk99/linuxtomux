@@ -8,80 +8,148 @@ puts the biggest uncensored model each device can run right on the
 device. Pure Python standard library on both ends: no pip installs, no
 builds, nothing to pay for, no keys to buy.
 
-## Install
+## Quickstart: 2 steps, no IP needed
 
-Two steps, no placeholders. The Linux box prints the exact command
-the phone needs, with the real address and the real pairing key
-already filled in. Copy it, run it, they are connected.
-
-**Step 1 — Linux** (the server side; do this first):
+**Step 1 — Linux.** Copy-paste this whole block as-is. It updates
+the checkout first (a stale copy is the #1 setup failure: old versions
+do not have `--public` at all and silently ignore the flag), then
+installs, then starts the server. The server prints a **4-digit code**,
+big and clear:
 
 ```sh
-git clone https://github.com/jaykk99/linuxtomux.git
-cd linuxtomux
+if [ -d ~/linuxtomux/.git ]; then cd ~/linuxtomux && git pull; else git clone https://github.com/jaykk99/linuxtomux.git ~/linuxtomux && cd ~/linuxtomux; fi
 ./install-linux.sh
 monico-server start
 ```
 
 `install-linux.sh` copies the app to `~/.monico-bridge/app` and puts
-`monico-server`, `monico-cmd`, and `monico-model` in `~/.local/bin`
-(make sure that is on your PATH). `monico-server start` prints the
-pairing key once (saved at `~/.monico-bridge/pairing-key`, 0600) and
-then a block like this, with your real numbers in it:
+`monico-server`, `monico-cmd`, `monico-model`, and `monico-pair` in
+`~/.local/bin`. The code is good for 10 minutes and one use; a fresh
+one any time with `monico-pair` (no restart needed).
+
+**Step 2 — Termux.** Install the repo on the phone, then connect.
+The phone finds the Linux box on the local network by itself: no IP
+to type, nothing to paste:
 
 ```sh
-Run this on your phone (Termux):
-  curl -fsSL http://192.168.1.23:8765/install-termux.sh | MONICO_SERVER=http://192.168.1.23:8765 MONICO_TOKEN=abc123-your-real-key bash
-  monico-connect
+pkg install python git
+git clone https://github.com/jaykk99/linuxtomux.git
+cd linuxtomux
+./install-termux.sh
+monico-connect
 ```
 
-(The numbers above are a worked example, clearly fake. The block
-your server prints has your box's real LAN address and your real
-key. It prints the block on every start, even when the key was
-already saved, so you never have to go looking for it.)
+`monico-connect` asks for the 4-digit code from the Linux screen.
+Type it in and the phone connects OUT to the Linux box and stays
+connected. From that moment the phone is a server too: its commands,
+its status page, and its hosted files are reachable through the
+bridge.
 
-**Step 2 — Termux** (the phone side): copy the block from step 1
-and run it on the phone. That is the whole install: it puts
-`monico-connect`, `monico-cmd`, and `monico-model` in `$PREFIX/bin`
-and saves the server + pairing key to
-`~/.monico-bridge/client.json` (0600). Then `monico-connect` is the
-phone's one command: the phone connects OUT to the Linux box and
-stays connected.
-
-**Step 3 — check they are connected.** On the Linux box, open the
-dashboard address the server printed (same WiFi) and enter the PIN:
-the phone shows up as a card with its live RAM, storage, CPU, and
-battery. Or from either side, run a command on the other:
+**Check it worked.** Open the dashboard URL the server printed and
+enter your PIN: the phone shows up as a card with live RAM, storage,
+CPU, and battery. Or from either side, run a command on the other:
 
 ```sh
 monico-cmd phone 'uname -a'     # from Linux, runs on the phone
 monico-cmd linux 'uname -a'     # from the phone, runs on Linux
 ```
 
-**No internet on the phone?** The printed command fetches the
-installer AND the app files from the Linux box itself
-(`/linuxtomux.tar.gz`), so it works with no internet on the phone
-as long as it is on the same WiFi. The clone route below is the
-fallback for a phone that is not on the same network yet (it needs
-internet for the `git clone` only):
+## Not on the same WiFi
+
+The code flow finds the server by a broadcast on the local network,
+so both devices need to be on the same WiFi (or hotspot, or USB —
+see below). If the phone is somewhere else entirely, start the
+server with a public URL and point the phone at it directly; the
+code still works the same way:
 
 ```sh
-pkg install python git
-git clone https://github.com/jaykk99/linuxtomux.git
-cd linuxtomux
-MONICO_SERVER=http://192.168.1.23:8765 MONICO_TOKEN=abc123-your-real-key ./install-termux.sh
+# on Linux
+monico-server start --public
+# on the phone (public URL from the server's `Public dashboard:` line,
+# without the /dashboard at the end)
+monico-connect --server https://<name>.trycloudflare.com
+```
+
+The public URL is new on every start, so use the fresh one each
+time you restart. On a Chromebook Linux container the LAN address
+usually is not reachable from the phone, so use `--public` there.
+
+## Troubleshooting
+
+**`monico-server --public` prints usage and exits.**
+You missed `start`. It is always `monico-server start --public`
+(`start` first, flags after).
+
+**Server starts but shows no public URL and no code.**
+Stale install: versions before the dashboard update do not have
+`--public` at all and silently ignore the flag. Fix it with:
+
+```sh
+cd ~/linuxtomux && git pull
+./install-linux.sh
+monico-server start --public
+```
+
+If `git pull` complains about local changes, move the checkout aside
+and clone fresh, then run the Step 1 block again:
+
+```sh
+mv ~/linuxtomux ~/linuxtomux.old
+```
+
+**`cloudflared is not installed.`**
+Run the one command the server prints, then start again:
+
+```sh
+sudo curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared && sudo chmod +x /usr/local/bin/cloudflared
+monico-server start --public
+```
+
+**`monico-connect` says "No server found with that code."**
+Same WiFi? Server running? Code right? The code is good for 10
+minutes and one use: run `monico-pair` on the Linux box for a fresh
+one, then `monico-connect` again. If the phone is not on the same
+network at all, use the `--server` route in "Not on the same WiFi"
+above instead of discovery.
+
+**`monico-connect` says "bad or expired pair code."**
+The code was already used, or the 10 minutes ran out. Run
+`monico-pair` on the Linux box for a fresh code.
+
+**`monico-pair` says the server is not running.**
+Start it first: `monico-server start`. `monico-pair` only mints
+codes for a server that is already up.
+
+**`monico-server: command not found`.**
+Open a new terminal so `~/.local/bin` is on your PATH, or run
+`~/.local/bin/monico-server start --public`.
+
+**`monico-connect: command not found` on the phone.**
+The install did not finish: run `./install-termux.sh` again from
+inside the `linuxtomux` checkout on the phone and watch for an
+error (a failed `git clone` means the phone has no internet; see
+"No internet on the phone?" below).
+
+**No internet on the phone?** The normal install needs internet
+once, for the `git clone` only. After that everything (the code
+exchange, the control channel, the dashboard) is plain HTTP on the
+local network, no internet needed on either side. If the phone has
+no internet at all, use the Linux box as the source instead: the
+server serves the installer and the app files itself
+(`/install-termux.sh` and `/linuxtomux.tar.gz`). From the phone,
+with the server's LAN address from its startup output:
+
+```sh
+curl -fsSL http://192.168.1.23:8765/install-termux.sh -o install-termux.sh
+MONICO_SERVER=http://192.168.1.23:8765 bash install-termux.sh
 monico-connect
 ```
 
-Use the address and key from your server's startup output in place
-of the example numbers above.
+The installer fetches the app tarball from the Linux box, then
+`monico-connect` asks for the 4-digit code as usual. (The
+192.168.1.23 above is an example: use your server's LAN address.)
 
-**The model, both sides** (optional, uncensored, biggest the device
-can run):
-
-```sh
-monico-model install
-```
+---
 
 ## Old and new devices
 
@@ -112,28 +180,40 @@ monico-model install
 **On the Linux box:**
 
 ```sh
-monico-server start
+monico-server start --public
 ```
 
 It prints the pairing key once (saved at `~/.monico-bridge/pairing-key`,
-0600), prints the ready-to-paste Termux command, and starts
-listening. The homescreen lives at the address the server prints.
+0600), prints a 4-digit code for the phone, and starts listening.
+The homescreen lives at the address the server prints. Leave off
+`--public` for same-WiFi only (see above). A fresh code any time,
+without restarting:
 
-**On the phone (Termux):** run the block the server printed, then:
+```sh
+monico-pair
+```
+
+**On the phone (Termux):** install the repo, then:
 
 ```sh
 monico-connect
 ```
 
-`monico-connect` is the phone's one command. The phone connects OUT to
-the Linux box and stays connected. From that moment the phone is a
-server too: its commands, its status page, and its hosted files are
-reachable through the bridge.
+`monico-connect` is the phone's one command: it asks for the
+4-digit code from the Linux screen (or take it as an argument:
+`monico-connect 1234`), finds the server on the local network by
+itself, and connects. Run `./install-linux.sh` once on the Linux
+box to put `monico-server`, `monico-cmd`, `monico-model`, and
+`monico-pair` in `~/.local/bin`. Run `./install-termux.sh` once on
+the phone (from the repo checkout) for `monico-connect`,
+`monico-cmd`, and `monico-model` in `$PREFIX/bin`.
 
-Run `./install-linux.sh` once on the Linux box to put `monico-server`,
-`monico-cmd`, and `monico-model` in `~/.local/bin`. Run the printed
-Termux block once on the phone for `monico-connect`, `monico-cmd`,
-and `monico-model` in `$PREFIX/bin`.
+**The model, both sides** (optional, uncensored, biggest the device
+can run):
+
+```sh
+monico-model install
+```
 
 ## Why the phone connects out
 
@@ -328,17 +408,12 @@ often a device reports.
 
 ## Public URL (--public)
 
-The dashboard works from anywhere, not just the local network:
-
-```sh
-monico-server start --public
-```
-
-That launches a free Cloudflare quick tunnel (no account, no card)
-and prints a public `https://<name>.trycloudflare.com/dashboard`
-URL. The phone opens that URL from anywhere. If `cloudflared` is not
-installed, the server says so plainly and prints the one install
-command instead of failing silently.
+See Quickstart: `monico-server start --public` launches a free
+Cloudflare quick tunnel (no account, no card) and prints a public
+`https://<name>.trycloudflare.com/dashboard` URL. The phone opens
+that URL from anywhere. If `cloudflared` is not installed, the
+server says so plainly and prints the one install command instead of
+failing silently (see Troubleshooting).
 
 A durable URL on your own Cloudflare account (named tunnel) is the
 follow-up, not built here: it needs `cloudflared tunnel login`, a
@@ -405,9 +480,10 @@ specs, sync, and the shared terminal are plain HTTP from the phone
 to the Linux box, no DNS and no cloud service involved.
 
 - **Same WiFi (primary):** the phone opens the Linux box directly at
-  its LAN address. The server prints the LAN dashboard URL and the
-  ready-to-paste Termux command at startup. No internet needed on
-  either side for the dashboard, terminal, or commands.
+  its LAN address, found by a UDP broadcast on port 18766 after the
+  4-digit code is typed: no IP to look up, no address to paste. The
+  server prints the LAN dashboard URL at startup too. No internet
+  needed on either side for the dashboard, terminal, or commands.
 - **USB (fallback, no shared WiFi):** plug the phone in and run
   `adb reverse tcp:8765 tcp:8765` on the Linux box; the phone then
   reaches the server at `http://127.0.0.1:8765`. Documented, not
@@ -504,7 +580,7 @@ live gate is a separate step.
 ## Layout
 
 ```
-monico-server / monico-connect / monico-cmd / monico-model   commands
+monico-server / monico-connect / monico-cmd / monico-model / monico-pair   commands
 bridge/server.py     Linux side: registry, mesh sync, relay, homescreen
 bridge/client.py     Termux side: channel + the phone's hosted service
 bridge/cli.py        command-line entry points

@@ -2,7 +2,8 @@
 
 Linux side:   monico-server start [--port N] [--join URL] [--key KEY]
                                   [--name NAME] [--public] | token-add <token> | key
-Termux side:  monico-connect [--server URL] [--key KEY] [--name NAME]
+              monico-pair        print a fresh 4-digit code for a running server
+Termux side:  monico-connect [CODE] [--server URL] [--key KEY] [--name NAME]
 Both sides:   monico-cmd <linux|phone|device-name|device-id> <command...>
               monico-model install [--device this|both] [--dry-run] [--profile NAME]
 """
@@ -240,15 +241,52 @@ def server_main(argv: list[str]) -> int:
     return 2
 
 
+def pair_main(argv: list[str]) -> int:
+    """Print a fresh 4-digit code for the already-running server,
+    without restarting it. Talks to POST /pair-new on loopback with
+    the pairing key; if the server is not running, say so plainly."""
+    def opt(flag: str) -> str | None:
+        return argv[argv.index(flag) + 1] if flag in argv else None
+    port = int(opt("--port") or DEFAULT_PORT)
+    key, _ = get_or_create_key()
+    try:
+        req = urllib.request.Request(
+            f"http://127.0.0.1:{port}/pair-new", data=b"{}", method="POST",
+            headers={"X-Pair-Key": key, "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            code = json.loads(resp.read() or b"{}").get("code") or ""
+    except Exception:
+        print("ERROR: the server is not running on this box. "
+              "Start it first with: monico-server start", file=sys.stderr)
+        return 1
+    if not code:
+        print("ERROR: the server did not return a code.", file=sys.stderr)
+        return 1
+    print()
+    print("  ===============================")
+    print(f"   YOUR 4-DIGIT CODE:  {code}")
+    print("  ===============================")
+    print("  (valid 10 minutes, one use)")
+    print()
+    print("  On the phone (Termux): monico-connect, then type this code.")
+    return 0
+
+
 def connect_main(argv: list[str]) -> int:
     from .client import connect
-    opts = {"server_url": "", "key": "", "name": ""}
-    for i, a in enumerate(argv):
-        if a == "--server":
-            opts["server_url"] = argv[i + 1]
-        elif a == "--key":
-            opts["key"] = argv[i + 1]
-        elif a == "--name":
-            opts["name"] = argv[i + 1]
+    opts = {"server_url": "", "key": "", "name": "", "code": ""}
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a in ("--server", "--key", "--name") and i + 1 < len(argv):
+            opts[{"--server": "server_url", "--key": "key",
+                  "--name": "name"}[a]] = argv[i + 1]
+            i += 2
+        elif a.startswith("-"):
+            print(f"unknown option: {a}", file=sys.stderr)
+            return 2
+        else:
+            opts["code"] = a  # bare 4-digit code from the Linux screen
+            i += 1
     connect(**opts)
     return 0
