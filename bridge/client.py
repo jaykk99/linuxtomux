@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import json
 import os
+import socket
+import sys
 import threading
 import time
 import urllib.error
@@ -190,13 +192,152 @@ class Client:
                 backoff = min(backoff * 2, 30)
 
 
-def connect(server_url: str = "", key: str = "", name: str = "") -> None:
+DISCOVERY_UDP_PORT = 18766  # same port the server listens on
+DISCOVERY_ROUNDS = 2        # broadcast rounds before giving up
+DISCOVERY_WAIT_S = 2.5      # seconds listening per round
+
+
+def _prompt_pair_code() -> str:
+    """Ask for the 4-digit code from the Linux screen. Reads from
+    /dev/tty when stdin is not a terminal (piped runs), else stdin,
+    so the prompt works however monico-connect was started."""
+    tty = None
+    try:
+        tty = open("/dev/tty", "r")
+    except OSError:
+        tty = None
+    src = tty or sys.stdin
+    try:
+        print("Enter the 4-digit code: ", end="", flush=True, file=sys.stderr)
+        code = src.readline().strip()
+    finally:
+        if tty is not None:
+            tty.close()
+    if len(code) != 4 or not code.isdigit():
+        raise SystemExit("That is not a 4-digit code. "
+                         "Run monico-connect again with the code from "
+                         "the Linux screen (monico-pair for a fresh one).")
+    return code
+
+
+def _discovery_payload(code: str) -> bytes:
+    """The broadcast packet: a type tag and the code, nothing else.
+    Split out so tests can prove the wire format without a socket."""
+    return json.dumps({"type": "monico-discover", "code": code}).encode()
+
+
+def _parse_discovery_reply(data: bytes) -> str | None:
+    """A discovery reply in, the server URL out (or None for anything
+    that is not a well-formed monico-here reply)."""
+    try:
+        msg = json.loads(data.decode("utf-8", "replace"))
+    except Exception:
+        return None
+    if not isinstance(msg, dict) or msg.get("type") != "monico-here":
+        return None
+    return str(msg.get("server") or "") or None
+
+
+def _discover_server(code: str) -> str | None:
+    """Find a server on the local network that knows this code. A UDP
+    broadcast to every interface plus a loopback unicast (adb-reverse
+    setups reach the server at 127.0.0.1); the first server that
+    answers wins. A wrong code gets silence, so no reply means the
+    code is wrong/expired, the server is not running, or the phone
+    is not on the same network. Returns the server URL or None."""
+    payload = _discovery_payload(code)
+    targets = [("255.255.255.255", DISCOVERY_UDP_PORT),
+               ("127.0.0.1", DISCOVERY_UDP_PORT)]
+    for _round in range(DISCOVERY_ROUNDS):
+        sock = None
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            sock.settimeout(DISCOVERY_WAIT_S)
+            for target in targets:
+                try:
+                    sock.sendto(payload, target)
+                except OSError:
+                    pass
+            deadline = time.time() + DISCOVERY_WAIT_S
+            while time.time() < deadline:
+                try:
+                    data, _addr = sock.recvfrom(1024)
+                except socket.timeout:
+                    break
+                except OSError:
+                    break
+                server_url = _parse_discovery_reply(data)
+                if server_url:
+                    return server_url
+        except OSError:
+            return None
+        finally:
+            if sock is not None:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+    return None
+
+
+def _exchange_code(server_url: str, code: str) -> str:
+    """Trade the 4-digit code for the pairing key at the discovered
+    server. Loud failure, never silent: a bad code or a dead server
+    is an error message and exit 1, not an empty install."""
+    url = server_url.rstrip("/") + f"/pair?code={code}"
+    try:
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            key = json.loads(resp.read() or b"{}").get("key") or ""
+    except urllib.error.HTTPError:
+        raise SystemExit("ERROR: bad or expired pair code. Run monico-pair "
+                         "on the Linux box for a fresh code (codes last "
+                         "10 minutes, one use).")
+    except Exception:
+        raise SystemExit(f"ERROR: could not reach {server_url}. Is the "
+                         "server still running, and is the phone on the "
+                         "same WiFi?")
+    if not key:
+        raise SystemExit("ERROR: bad or expired pair code. Run monico-pair "
+                         "on the Linux box for a fresh code.")
+    return key
+
+
+def _pair_with_code(code: str) -> tuple[str, str]:
+    """Full code flow: find the server by broadcast, exchange the
+    code for the pairing key, save both (0600) for next time."""
+    server_url = _discover_server(code)
+    if not server_url:
+        raise SystemExit("ERROR: No server found with that code. Same WiFi? "
+                         "Server running? Code right? (monico-pair on the "
+                         "Linux box prints a fresh code.)")
+    key = _exchange_code(server_url, code)
+    save_json(CLIENT_CONFIG, {"server_url": server_url, "key": key})
+    print(f"Paired with {server_url}.", flush=True)
+    return server_url, key
+
+
+def connect(server_url: str = "", key: str = "", name: str = "",
+            code: str = "") -> None:
     saved = load_json(CLIENT_CONFIG)
     server_url = server_url or os.environ.get("MONICO_SERVER", "") or saved.get("server_url", "")
     key = key or os.environ.get("MONICO_TOKEN", "") or saved.get("key", "")
     name = name or saved.get("name", "") or os.environ.get("MONICO_NAME", "") \
         or (detect().get("device_model") or "termux-device")
     if not server_url or not key:
-        raise SystemExit("Need a server URL and pairing key. "
-                         "Run install-termux.sh first, or set MONICO_SERVER and MONICO_TOKEN.")
+        # No saved pairing yet: the 4-digit code from the Linux
+        # screen is the whole flow. A --server URL skips discovery
+        # (public tunnel / adb-reverse); otherwise the phone finds
+        # the server on the local network by itself.
+        code = (code or "").strip()
+        if not code:
+            code = _prompt_pair_code()
+        if len(code) != 4 or not code.isdigit():
+            raise SystemExit("That is not a 4-digit code. Run monico-connect "
+                             "again with the code from the Linux screen.")
+        if server_url and not key:
+            key = _exchange_code(server_url, code)
+            save_json(CLIENT_CONFIG, {"server_url": server_url, "key": key})
+        else:
+            server_url, key = _pair_with_code(code)
     Client(server_url, key, name).run()
