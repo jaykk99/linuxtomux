@@ -4,15 +4,53 @@
 # to ~/.monico-bridge/app, launchers land in $PREFIX/bin, secrets are
 # written to a local env file with 0600 perms, never echoed back.
 #
-# Run it with the exact command printed by `monico-server start` on
-# the Linux box (real address and key already filled in). That command
-# fetches this script AND the app files from the Linux box itself, so
-# it works with no internet on the phone as long as it is on the same
-# WiFi. Without a server URL it falls back to a git clone, which needs
-# internet.
+# Run it with the one command printed by `monico-server start` on the
+# Linux box (real address and pair code already filled in):
+#   curl -s http://<ip>:8765/i | bash -s <ip>:8765 <code>
+# That command fetches this script AND the app files from the Linux box
+# itself, so it works with no internet on the phone as long as it is on
+# the same WiFi. The code is exchanged for the pairing key, the files
+# install, and the phone connects by itself: nothing else to type or run.
+# A failed download or a bad code fails LOUDLY (the old silent curl -f
+# failure is gone). Without a server it falls back to a git clone, which
+# needs internet.
 #
 # Or clone the repo and run ./install-termux.sh from inside it.
 set -eu
+
+# Server + pair code arrive as args from the printed one-liner, or as
+# env vars from the old long form. Never read a code from stdin: when
+# piped (curl | bash) stdin is the script itself.
+SERVER="${1:-${MONICO_SERVER:-}}"
+[ -n "$SERVER" ] && [ "${SERVER#http}" = "$SERVER" ] && SERVER="http://$SERVER"
+MONICO_SERVER="$SERVER"
+CODE="${2:-}"
+TOKEN="${MONICO_TOKEN:-}"
+
+if [ -n "$SERVER" ] && [ -z "$TOKEN" ]; then
+  if [ -z "$CODE" ]; then
+    if [ -e /dev/tty ]; then
+      printf "Pair code from the server screen: " > /dev/tty
+      read -r CODE < /dev/tty
+    fi
+  fi
+  if [ -z "$CODE" ]; then
+    echo "ERROR: no pair code. Copy the full one-line command printed by monico-server start (it ends with the 6-digit code)." >&2
+    exit 1
+  fi
+  base="${SERVER%/}"
+  [ "${base#http}" = "$base" ] && base="http://$base"
+  resp="$(curl -fsSL "$base/pair?code=$CODE" 2>/dev/null)" || {
+    echo "ERROR: could not reach $base. Is the server running, and is the phone on the same WiFi?" >&2
+    exit 1
+  }
+  TOKEN="$(printf '%s' "$resp" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("key") or "")' 2>/dev/null || true)"
+  if [ -z "$TOKEN" ]; then
+    echo "ERROR: bad or expired pair code. Copy the fresh one-line command from the server screen (codes last 10 minutes, one use)." >&2
+    exit 1
+  fi
+  MONICO_TOKEN="$TOKEN"
+fi
 
 APP_DIR="$HOME/.monico-bridge/app"
 BIN_DIR="${PREFIX:-$HOME/../usr}/bin"
@@ -27,7 +65,11 @@ elif [ -n "${MONICO_SERVER:-}" ]; then
   # the exact code it runs at /linuxtomux.tar.gz.
   base="${MONICO_SERVER%/}"
   tmp="$(mktemp -d)"
-  curl -fsSL "$base/linuxtomux.tar.gz" | tar -xz -C "$tmp"
+  curl -fsSL "$base/linuxtomux.tar.gz" | tar -xz -C "$tmp" || {
+    echo "ERROR: could not download $base/linuxtomux.tar.gz. Is the server still running, and is the phone on the same WiFi?" >&2
+    rm -rf "$tmp"
+    exit 1
+  }
   cp -r "$tmp/bridge" "$tmp/ui" "$APP_DIR/"
   cp "$tmp"/monico-connect "$tmp"/monico-cmd "$tmp"/monico-model "$APP_DIR/"
   rm -rf "$tmp"
@@ -70,6 +112,10 @@ else
 fi
 
 echo
+if [ -n "${MONICO_SERVER:-}" ] && [ -n "${MONICO_TOKEN:-}" ]; then
+  echo "Installed. Connecting this phone to the server now (leave this running):"
+  exec "$BIN_DIR/monico-connect"
+fi
 echo "Done. Turn this phone into a server with:"
 echo "  monico-connect"
 echo "Run a command on the Linux box from here:"

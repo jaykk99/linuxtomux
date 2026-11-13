@@ -638,6 +638,9 @@ class Bridge:
 
 
 BRIDGE = Bridge()
+# Short-lived phone pairing code: {"code", "key", "expires", "attempts"}.
+# Set at serve() start; the /pair route redeems it exactly once.
+PAIR_STATE: dict = {"code": None, "key": None, "expires": 0.0, "attempts": 0}
 
 
 # ----------------------------------------------------------------------
@@ -1017,13 +1020,23 @@ def make_handler():
                                         "server_id": BRIDGE.server_id,
                                         "name": BRIDGE.name,
                                         "uptime_s": int(time.time() - BRIDGE.started)})
-            if p == "/install-termux.sh":
+            if p in ("/install-termux.sh", "/i"):
                 # Public, like termux-code's install.sh: the script itself
-                # carries no secret; the pairing key arrives via env.
+                # carries no secret; the pairing key arrives via env or
+                # via a /pair code exchange. /i is the short alias the
+                # printed one-line phone command uses.
                 script = UI_FILE.parent.parent / "install-termux.sh"
                 if script.exists():
                     return self._send(200, script.read_bytes(), "text/x-shellscript")
                 return self._json(404, {"error": "installer not found"})
+            if p == "/pair":
+                # Exchange a short-lived pairing code for the pairing
+                # key, once. No key without a current code.
+                qs = parse_qs(urlparse(self.path).query)
+                key = _redeem_pair_code((qs.get("code") or [""])[0])
+                if key is None:
+                    return self._json(403, {"error": "bad or expired pair code"})
+                return self._json(200, {"key": key})
             if p == "/linuxtomux.tar.gz":
                 # Public: the tarball carries no secret. The phone
                 # downloads the exact code this server runs, no GitHub
@@ -1327,20 +1340,51 @@ def _lan_ip() -> str | None:
         return None
 
 
-def _termux_connect_block(lan_ip: str | None, port: int, key: str) -> str:
-    """The ready-to-paste Termux block printed at startup: the real LAN
-    IP and the real pairing key, no placeholders. Empty when there is
-    no LAN address (nothing to paste yet). The curl line fetches the
-    installer from this box itself, so it works with no internet on
-    the phone as long as it is on the same WiFi."""
+def _new_pair_code(key: str) -> str:
+    """One short-lived pairing code for the phone: 6 digits, single use,
+    10 minutes. The printed Termux command carries the code, never the
+    pairing key, so the command stays one short line. Wrong guesses are
+    counted; after 5 the code dies and a fresh one is printed."""
+    import random
+    PAIR_STATE.update({
+        "code": f"{random.randint(0, 999999):06d}",
+        "key": key,
+        "expires": time.time() + 600,
+        "attempts": 0,
+    })
+    return PAIR_STATE["code"]
+
+
+def _redeem_pair_code(code: str) -> str | None:
+    """Return the pairing key for a valid code (consumed on success),
+    else None. A wrong code counts against the 5-guess budget."""
+    if not code or PAIR_STATE.get("code") is None:
+        return None
+    if time.time() > PAIR_STATE.get("expires", 0):
+        PAIR_STATE["code"] = None
+        return None
+    if code != PAIR_STATE["code"]:
+        PAIR_STATE["attempts"] = PAIR_STATE.get("attempts", 0) + 1
+        if PAIR_STATE["attempts"] >= 5:
+            PAIR_STATE["code"] = None
+            print("Pair code locked out after 5 wrong guesses; restart the server for a fresh code.", flush=True)
+        return None
+    PAIR_STATE["code"] = None
+    return PAIR_STATE.get("key")
+
+
+def _termux_connect_block(lan_ip: str | None, port: int, code: str) -> str:
+    """The ready-to-paste Termux command printed at startup: one short
+    line, the real LAN IP and the current pairing code, no key and no
+    placeholders. Empty when there is no LAN address. The installer
+    exchanges the code for the pairing key, installs, then connects,
+    so there is nothing else to type or run."""
     if not lan_ip:
         return ""
     base = f"http://{lan_ip}:{port}"
     return (
-        "Run this on your phone (Termux):\n"
-        f"  curl -fsSL {base}/install-termux.sh | "
-        f"MONICO_SERVER={base} MONICO_TOKEN={key} bash\n"
-        "  monico-connect"
+        "On your phone (Termux), paste this one command:\n"
+        f"  curl -s {base}/i | bash -s {lan_ip}:{port} {code}"
     )
 
 
@@ -1432,7 +1476,7 @@ def serve(port: int, join_url: str | None = None, join_key: str | None = None,
     lan = _lan_ip()
     if lan:
         print(f"LAN dashboard: http://{lan}:{port}/dashboard (same WiFi, no internet needed)", flush=True)
-        print(_termux_connect_block(lan, port, key), flush=True)
+        print(_termux_connect_block(lan, port, _new_pair_code(key)), flush=True)
     else:
         print("No LAN address found: connect this box to WiFi to get the phone command.", flush=True)
     tunnel_proc = None
