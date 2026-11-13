@@ -1,14 +1,16 @@
 """Unit tests: the two-step connect flow.
 
-1. `monico-server start` prints a ready-to-paste Termux block with the
-   real LAN IP and the real pairing key, no placeholders.
-2. The printed curl line actually runs: install-termux.sh fetches the
-   app tarball from the Linux box itself (no GitHub, no internet on
-   the phone), installs the launchers, and saves the server + key.
+1. `monico-server start` prints one short ready-to-paste Termux command
+   with the real LAN IP and a 6-digit pair code, no key, no placeholders.
+2. The printed command actually runs: install-termux.sh exchanges the
+   code for the pairing key, fetches the app tarball from the Linux box
+   itself (no GitHub, no internet on the phone), installs the launchers,
+   saves the server + key, and connects by itself.
 Run: python3 -m pytest tests/ -q"""
 import io
 import json
 import os
+import shlex
 import stat
 import subprocess
 import sys
@@ -35,18 +37,16 @@ REPO = Path(__file__).resolve().parent.parent
 
 
 def test_termux_block_has_real_values_no_placeholders():
-    block = _termux_connect_block("192.168.1.23", 8765, "abc123-real-key")
-    assert "192.168.1.23:8765" in block
-    assert "MONICO_SERVER=http://192.168.1.23:8765" in block
-    assert "MONICO_TOKEN=abc123-real-key" in block
-    assert "curl -fsSL http://192.168.1.23:8765/install-termux.sh" in block
-    assert "monico-connect" in block
+    block = _termux_connect_block("192.168.1.23", 8765, "123456")
+    assert "curl -s http://192.168.1.23:8765/i | bash -s 192.168.1.23:8765 123456" in block
+    assert "MONICO_TOKEN" not in block and "MONICO_SERVER" not in block
+    assert "install-termux.sh" not in block
     assert "<" not in block and ">" not in block
     assert "linux-host" not in block and "pairing key" not in block
 
 
 def test_termux_block_empty_without_lan_ip():
-    assert _termux_connect_block(None, 8765, "abc123-real-key") == ""
+    assert _termux_connect_block(None, 8765, "123456") == ""
 
 
 def test_repo_tarball_has_everything_installer_needs():
@@ -100,22 +100,32 @@ def test_printed_curl_line_installs_offline(tmp_path):
         env = dict(os.environ)
         env["HOME"] = str(home)
         env["PREFIX"] = str(prefix)
+        env["MONICO_HOME"] = str(tmp_path / "phone-data")
         env["PATH"] = str(bindir) + ":" + env["PATH"]
 
-        # The exact two lines the server prints (LAN IP is loopback
-        # here; the shape is what is under test). Run from an empty
-        # directory so the installer cannot copy from a local checkout
-        # and must take the tarball branch.
-        block = _termux_connect_block("127.0.0.1", port, key)
+        # The exact one-line command the server prints (LAN IP is
+        # loopback here; the shape is what is under test). It ends by
+        # connecting, so it runs until the timeout kills it: return
+        # code 124 with the "connected" line in the output means the
+        # install finished and the phone is on the server. Run from an
+        # empty directory so the installer cannot copy from a local
+        # checkout and must take the tarball branch.
+        code = server_mod._new_pair_code(key)
+        block = _termux_connect_block("127.0.0.1", port, code)
         assert "<" not in block
-        curl_line, connect_line = [ln.strip() for ln in block.splitlines()[1:]]
-        assert connect_line == "monico-connect"
+        curl_line = block.splitlines()[1].strip()
         empty_cwd = tmp_path / "empty-cwd"
         empty_cwd.mkdir()
-        proc = subprocess.run(curl_line, shell=True, env=env,
-                              capture_output=True, text=True, timeout=120,
+        # timeout wraps the whole pipeline (curl | bash), not just
+        # curl: the installer ends by connecting, which runs until
+        # the timeout kills it.
+        cmd = "timeout 15 bash -c " + shlex.quote(curl_line)
+        proc = subprocess.run(cmd, shell=True, env=env,
+                              capture_output=True, text=True, timeout=60,
                               cwd=str(empty_cwd))
-        assert proc.returncode == 0, proc.stdout + proc.stderr
+        assert proc.returncode == 124, proc.stdout + proc.stderr
+        assert f"connected to http://127.0.0.1:{port}" in proc.stdout, \
+            proc.stdout + proc.stderr
         assert not (bindir / "git.marker").exists(), \
             "installer fell back to a git clone; the offline path is broken"
         app = home / ".monico-bridge" / "app"
@@ -124,10 +134,10 @@ def test_printed_curl_line_installs_offline(tmp_path):
         assert (app / "ui" / "dashboard.html").is_file()
         launcher = prefix / "bin" / "monico-connect"
         assert launcher.is_file() and os.access(launcher, os.X_OK)
-        cfg = json.loads((home / ".monico-bridge" / "client.json").read_text())
+        cfg = json.loads((tmp_path / "phone-data" / "client.json").read_text())
         assert cfg["server_url"] == f"http://127.0.0.1:{port}"
         assert cfg["key"] == key
-        mode = stat.S_IMODE((home / ".monico-bridge" / "client.json").stat().st_mode)
+        mode = stat.S_IMODE((tmp_path / "phone-data" / "client.json").stat().st_mode)
         assert mode == 0o600, oct(mode)
     finally:
         httpd.shutdown()

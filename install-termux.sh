@@ -84,7 +84,7 @@ fi
 
 for cmd in monico-connect monico-cmd monico-model; do
   cat > "$BIN_DIR/$cmd" <<EOF
-#!/data/data/com.termux/files/usr/bin/bash
+#!/usr/bin/env bash
 cd "$APP_DIR" && exec python3 "$APP_DIR/$cmd" "\$@"
 EOF
   chmod +x "$BIN_DIR/$cmd" "$APP_DIR/$cmd"
@@ -96,7 +96,9 @@ if [ -n "${MONICO_SERVER:-}" ] && [ -n "${MONICO_TOKEN:-}" ]; then
   python3 - "$MONICO_SERVER" "$MONICO_TOKEN" <<'PY'
 import json, os, sys
 from pathlib import Path
-cfg = Path.home() / ".monico-bridge" / "client.json"
+# Same location the client reads (bridge/common.py DATA_DIR):
+# MONICO_HOME wins when set, else ~/.monico-bridge.
+cfg = Path(os.environ.get("MONICO_HOME", str(Path.home() / ".monico-bridge"))).expanduser() / "client.json"
 cfg.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
 data = {}
 if cfg.exists():
@@ -105,7 +107,7 @@ if cfg.exists():
 data.update({"server_url": sys.argv[1], "key": sys.argv[2]})
 cfg.write_text(json.dumps(data, indent=2) + "\n")
 cfg.chmod(0o600)
-print("Saved server + pairing key to ~/.monico-bridge/client.json (0600).")
+print(f"Saved server + pairing key to {cfg} (0600).")
 PY
 else
   echo "No MONICO_SERVER / MONICO_TOKEN given; run monico-connect with the server URL and pairing key printed by monico-server start."
