@@ -6,6 +6,7 @@ import os
 import platform
 import shutil
 import subprocess
+import time
 from pathlib import Path
 
 
@@ -27,15 +28,41 @@ def is_termux() -> bool:
             or Path("/data/data/com.termux").exists())
 
 
+# Android build props and the GPU do not change while the process
+# runs, and each probe is a subprocess (getprop / nvidia-smi / rocm-smi).
+# The server re-detects hardware every 30s, so caching these keeps old
+# phones from spawning tools they cannot spare. A GPU is re-checked
+# every few minutes for an eGPU or a driver appearing late.
+_PROP_CACHE: dict[str, str] = {}
+_GPU_CACHE: dict = {"at": 0.0, "value": ""}
+GPU_TTL_S = 300
+
+
 def _android_prop(name: str) -> str:
+    if name in _PROP_CACHE:
+        return _PROP_CACHE[name]
     try:
-        out = subprocess.run(["getprop", name], capture_output=True, text=True, timeout=3)
-        return out.stdout.strip()
+        out = subprocess.run(["getprop", name], capture_output=True,
+                             text=True, timeout=3)
+        value = out.stdout.strip()
     except Exception:
-        return ""
+        value = ""
+    if value:   # never cache a transient failure
+        _PROP_CACHE[name] = value
+    return value
 
 
 def _gpu() -> str:
+    now = time.monotonic()
+    if _GPU_CACHE["value"] and now - _GPU_CACHE["at"] < GPU_TTL_S:
+        return _GPU_CACHE["value"]
+    value = _probe_gpu()
+    _GPU_CACHE["at"] = now
+    _GPU_CACHE["value"] = value
+    return value
+
+
+def _probe_gpu() -> str:
     for cmd in (["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
                 ["rocm-smi", "--showproductname"]):
         try:

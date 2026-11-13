@@ -58,6 +58,19 @@
   .install-status.err{color:var(--bad-t)}
   .install-status.done{color:var(--ok-t)}
 
+  /* ---- forms (adding a local app, settings) ---- */
+  .form{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+  @media(min-width:720px){.form{grid-template-columns:repeat(2,minmax(0,1fr))}}
+  .form .field{display:flex;flex-direction:column;gap:6px;min-width:0}
+  .form label{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--mut)}
+  .form input,.form select{height:38px;border:1px solid var(--line2);border-radius:8px;background:#0a0a0a;padding:0 12px;font-family:var(--mono);font-size:12px;color:var(--strong);min-width:0}
+  .form input::placeholder{color:var(--faint)}
+  .form input:focus,.form select:focus{border-color:var(--line3);outline:none}
+  .form .actions{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .form-msg{font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--mut);word-break:break-word}
+  .form-msg.err{color:var(--bad-t)}
+  .form-msg.done{color:var(--ok-t)}
+
   /* ---- console tab nav ---- */
   nav.tabs{display:flex;gap:20px;overflow-x:auto;scrollbar-width:none}
   nav.tabs::-webkit-scrollbar{display:none}
@@ -103,6 +116,41 @@
   .hidden{display:none}
   footer{max-width:1280px;margin:0 auto;padding:0 16px 32px;font-family:var(--mono);font-size:11px;color:var(--faint)}
   @media(min-width:768px){footer{padding:0 32px 32px}}
+  /* ---- 2026 refresh: signal light, depth and motion. Pure CSS: the
+     markup and data flow are unchanged, and older browsers simply keep
+     the flat console look (gradient text is behind @supports). ---- */
+  :root{--acid:#c6ff3d;--acid-line:rgba(198,255,61,.38);--acid-soft:rgba(198,255,61,.12)}
+  body{background:
+    radial-gradient(1100px 620px at 10% -12%, rgba(139,92,246,.16), transparent 60%),
+    radial-gradient(900px 520px at 90% -8%, rgba(34,211,238,.10), transparent 55%),
+    radial-gradient(760px 420px at 50% 112%, rgba(198,255,61,.06), transparent 60%),
+    var(--bg);
+    background-attachment:fixed}
+  body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+    background-size:52px 52px;
+    -webkit-mask-image:radial-gradient(circle at 50% 0%,#000,transparent 72%);
+    mask-image:radial-gradient(circle at 50% 0%,#000,transparent 72%)}
+  header.shell{background:rgba(7,7,7,.8)}
+  header.shell:after{content:"";display:block;height:1px;background:linear-gradient(90deg,transparent,var(--acid-line),rgba(139,92,246,.45),transparent)}
+  main,footer{position:relative;z-index:1}
+  .panel,.tile,.stat{box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 26px 50px -34px rgba(0,0,0,.95)}
+  .panel-h h3:before{content:"";display:inline-block;width:6px;height:6px;margin-right:8px;border-radius:2px;background:var(--acid);box-shadow:0 0 14px var(--acid-line);vertical-align:middle}
+  nav.tabs button.active,nav.tabs a.active{border-bottom-color:var(--acid);color:#fff}
+  nav.tabs button:hover,nav.tabs a:hover{border-bottom-color:rgba(198,255,61,.35)}
+  .btn.primary{background:linear-gradient(180deg,#fff 0%,#eaffd2 180%)}
+  .btn.primary:hover{background:var(--acid);box-shadow:0 0 26px var(--acid-line)}
+  .badge.ok .dot{animation:pulse 2.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 transparent}50%{opacity:.7;box-shadow:0 0 0 4px var(--acid-soft)}}
+  .tile,.stat{transition:transform .18s ease,border-color .18s ease}
+  .tile:hover,.stat:hover{transform:translateY(-2px);border-color:#333}
+  .mark{box-shadow:0 0 26px rgba(198,255,61,.10)}
+  .mark i{background:linear-gradient(135deg,#fff 20%,var(--acid))}
+  @supports ((background-clip:text) or (-webkit-background-clip:text)){
+    .stat .v{background:linear-gradient(180deg,#fff 0%,#bdbdbd 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  }
+  @media(max-width:520px){.stats{gap:10px}.stat{padding:12px}.stat .v{font-size:20px}.panel-b{padding:14px}}
+  @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none !important;transition:none !important}}
 </style>
 </head>
 <body>
@@ -124,6 +172,7 @@
       <button data-tab="apps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 9 4.9v10.2L12 22l-9-4.9V6.9L12 2Z"/><path d="m3.3 7 8.7 4.7 8.7-4.7"/><path d="M12 22V11.7"/></svg>Apps</button>
       <button data-tab="hosted"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 0 20a15.3 15.3 0 0 1 0-20Z"/></svg>Hosted</button>
       <button data-tab="models"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9.5" y="9.5" width="5" height="5"/><path d="M9 2v3M15 2v3M9 19v3M15 19v3M2 9h3M2 15h3M19 9h3M19 15h3"/></svg>Models</button>
+      <a href="/settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 8h6M17 16h6"/></svg>Settings</a>
     </nav>
   </div>
 </header>
@@ -143,7 +192,20 @@
 
   <section data-panel="apps" class="hidden">
     <div class="panel">
-      <div class="panel-h"><div><h3>Apps</h3><p>Hosted web apps, same on every server in the mesh.</p></div></div>
+      <div class="panel-h"><div><h3>Local software</h3><p>Repos, apps and software that run on this machine. Adding one registers it here; nothing on disk is changed or started.</p></div></div>
+      <div class="panel-b">
+        <form class="form" id="app-form" onsubmit="return addLocalApp(event)">
+          <div class="field"><label for="la-name">Name</label><input id="la-name" maxlength="60" placeholder="e.g. linuxtomux" autocomplete="off" required></div>
+          <div class="field"><label for="la-kind">Kind</label><select id="la-kind"><option value="repo">Repo</option><option value="app">App</option><option value="software">Software</option></select></div>
+          <div class="field"><label for="la-path">Local path</label><input id="la-path" placeholder="~/code/linuxtomux" autocomplete="off" spellcheck="false"></div>
+          <div class="field"><label for="la-url">Repo URL (optional)</label><input id="la-url" placeholder="https://github.com/owner/repo" autocomplete="off" spellcheck="false"></div>
+          <div class="actions"><button class="btn primary sm" type="submit" id="la-add">Add</button><span class="form-msg" id="la-msg"></span></div>
+        </form>
+        <div class="grid" id="local-apps" style="margin-top:20px"><div class="tile"><div class="empty-note">Loading...</div></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="panel-h"><div><h3>Hosted web apps</h3><p>Hosted web apps, same on every server in the mesh.</p></div></div>
       <div class="panel-b"><div class="grid" id="apps"><div class="tile"><div class="empty-note">Loading apps...</div></div></div></div>
     </div>
   </section>
@@ -323,14 +385,76 @@ function renderDevices(devs){
     </div>`).join("");
 }
 function renderHosted(devs){
-  document.getElementById("hosted").innerHTML = devs.flatMap(d=>{
+  // concat-map instead of flatMap: old Android WebViews lack flatMap.
+  const hosted = [].concat.apply([], devs.map(d=>{
     const items = d.hosted || [];
     const link = d.self ? "" : `/device/${d.device_id}/hosted/`;
     return items.map(h=>`<a class="tile" href="${link||"#"}">
       <div class="row"><div class="name">${esc(h)}</div><span class="badge">Hosted</span></div>
       <div class="meta">on ${esc(d.name)}</div>
       <div class="foot"><span>${esc(d.role||"")}</span><span>${d.online?"reachable":"offline"}</span></div></a>`);
-  }).join("") || '<div class="tile"><div class="empty-note">Nothing hosted yet</div></div>';
+  }));
+  document.getElementById("hosted").innerHTML = hosted.join("") || '<div class="tile"><div class="empty-note">Nothing hosted yet</div></div>';
+}
+/* ---- local app shelf: repos/apps/software on this box, added from
+   the Apps tab. The server checks the path on every list, so a moved
+   or deleted folder shows as Missing instead of a stale "ready". ---- */
+function localAppTile(a){
+  var cls = a.ok ? "live" : (a.status==="missing" ? "bad" : "");
+  var txt = a.ok ? "Ready" : (a.status==="missing" ? "Missing" : "Not local");
+  var lines = [];
+  if(a.path) lines.push(esc(a.path));
+  if(a.url) lines.push(`<a href="${esc(a.url)}" target="_blank" rel="noopener" style="color:var(--dim)">${esc(a.url)}</a>`);
+  if(!lines.length) lines.push(esc(a.reason||""));
+  var note = a.ok ? (a.git_repo ? "git checkout" : "folder on disk") : esc(a.reason||"");
+  return `<div class="tile">
+    <div class="row"><div class="name">${esc(a.name)}</div><span class="badge ${cls}">${txt}</span></div>
+    <div class="meta">${esc(a.kind_label)}<br>${lines.join("<br>")}<br>${note}</div>
+    <div class="foot"><span>${a.created?"added "+esc(new Date(a.created*1000).toLocaleDateString()):""}</span><button class="btn secondary sm" onclick="removeLocalApp('${esc(a.id)}')">Remove</button></div>
+  </div>`;
+}
+async function loadLocalApps(){
+  const r = await fetch("/api/local-apps");
+  if(!r.ok) throw new Error("HTTP "+r.status);
+  const data = await r.json();
+  const apps = data.apps || [];
+  document.getElementById("local-apps").innerHTML = apps.map(localAppTile).join("") || '<div class="tile"><div class="empty-note">Nothing added yet. Add a repo, app or piece of software above.</div></div>';
+}
+async function addLocalApp(e){
+  e.preventDefault();
+  const btn = document.getElementById("la-add");
+  const msg = document.getElementById("la-msg");
+  const payload = {
+    name: document.getElementById("la-name").value,
+    kind: document.getElementById("la-kind").value,
+    path: document.getElementById("la-path").value,
+    url: document.getElementById("la-url").value
+  };
+  btn.disabled = true; msg.className = "form-msg"; msg.textContent = "Adding...";
+  try{
+    const r = await fetch("/api/local-apps", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(payload)});
+    const d = await r.json().catch(function(){ return {}; });
+    if(!r.ok || d.error){
+      msg.className = "form-msg err"; msg.textContent = d.error || ("could not add the app (HTTP "+r.status+")");
+    } else {
+      msg.className = "form-msg done";
+      var where = d.app.ok ? (d.app.git_repo ? "Git checkout found at " : "Folder found at ")+d.app.path : d.app.reason;
+      msg.textContent = "Added "+d.app.name+". "+where;
+      document.getElementById("app-form").reset();
+      await loadLocalApps();
+    }
+  }catch(err){
+    msg.className = "form-msg err"; msg.textContent = "request failed: "+err;
+  }
+  btn.disabled = false;
+  return false;
+}
+async function removeLocalApp(id){
+  if(!confirm("Remove this from the shelf? Nothing on disk is touched.")) return;
+  try{
+    await fetch("/api/local-apps/delete", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({id:id})});
+  }catch(e){}
+  loadLocalApps();
 }
 function renderModels(devs){
   document.getElementById("models").innerHTML = devs.map(d=>{
@@ -375,6 +499,7 @@ async function load(){
   }catch(e){
     document.getElementById("apps").innerHTML = '<div class="tile"><div class="empty-note">Apps unavailable</div></div>';
   }
+  try{ await loadLocalApps(); }catch(e){}
 }
 load(); setInterval(load, 20000);
 </script>

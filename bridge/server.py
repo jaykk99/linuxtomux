@@ -51,11 +51,14 @@ from .common import (DATA_DIR, KEY_FILE, VERSION, blocked_reason,
                      get_or_create_server_id, log, model_status,
                      run_command)
 from . import pools as poolmod
+from .ai_gateway import MODEL_ALIAS, AIGateway, GatewayError, openai_error
 from .hwdetect import detect
+from .settings import AIKeyStore, LocalAppStore
 from .specs import clean_specs, live_specs
 
 UI_FILE = Path(__file__).resolve().parent.parent / "ui" / "homescreen.html"
 DASHBOARD_FILE = UI_FILE.parent / "dashboard.html"
+SETTINGS_FILE = UI_FILE.parent / "settings.html"
 
 # PIN gate for the dashboard (/dashboard), which is also the public
 # URL when --public is on. Only the SHA-256 hash of the PIN is stored
@@ -66,6 +69,16 @@ DASHBOARD_FILE = UI_FILE.parent / "dashboard.html"
 PIN_HASH = "5daa4478509ac22f36329f620ac7e22dd140d5fad7ff710b6670f7329ac217f7"
 PIN_SESSION_TTL_S = 12 * 3600
 PIN_COOKIE = "monico_pin"
+
+# OpenAI-compatible /v1 responses are usable from browser-based AI
+# clients too: CORS is open, while the mk-ai bearer key is still
+# required for every real request (PROPFIND-style preflights send no
+# credentials, so OPTIONS carries no data and no auth).
+AI_CORS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+}
 PIN_HTML = """<!doctype html><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Monico Labs - PIN</title><body style="font-family:system-ui;background:#0b0b0d;color:#f2f2f2;display:grid;place-items:center;min-height:100vh;margin:0">
 <form method="POST" action="/pin-login" style="text-align:center">
@@ -155,6 +168,13 @@ class Bridge:
         # PIN sessions for the dashboard: token -> expiry epoch.
         # In-memory only; a server restart logs everyone out.
         self.pin_sessions: dict[str, float] = {}
+        # Owner settings: AI API keys (stored hashed) and the local app
+        # shelf (repos/apps/software on this box).
+        self.ai_keys = AIKeyStore()
+        self.local_apps = LocalAppStore()
+        # OpenAI-compatible endpoint (keys above), forwarded to the
+        # installed llama.cpp model.
+        self.ai_gateway = AIGateway(self.ai_keys)
 
     # -- device registry -------------------------------------------------
     def register(self, info: dict) -> dict:
@@ -354,11 +374,13 @@ class Bridge:
                 out.append({"device_id": did, "name": did, "online": False,
                             "missing": True, "specs": None})
                 continue
-            out.append({k: d.get(k) for k in
-                        ("device_id", "name", "platform", "kind", "online",
-                         "via", "self", "hw", "specs", "specs_age_s")}
-                       | {"tight": poolmod.is_tight(d) if d.get("online") else None,
-                          "busy": self.inflight.get(did, 0)})
+            member = {k: d.get(k) for k in
+                      ("device_id", "name", "platform", "kind", "online",
+                       "via", "self", "hw", "specs", "specs_age_s")}
+            member["tight"] = (poolmod.is_tight(d)
+                               if d.get("online") else None)
+            member["busy"] = self.inflight.get(did, 0)
+            out.append(member)
         return out
 
     def pool_view(self, pid: str, known: dict[str, dict] | None = None) -> dict | None:
@@ -774,6 +796,53 @@ def make_handler():
             except Exception:
                 return {}
 
+        def _ai_authed(self) -> bool:
+            """Auth for /v1/*: an mk-ai key from the settings page."""
+            return BRIDGE.ai_gateway.authenticate(
+                self.headers.get("Authorization")) is not None
+
+        def _ai_headers(self, extra: dict | None = None) -> dict:
+            headers = dict(AI_CORS)
+            headers.update(extra or {})
+            return headers
+
+        def _ai_unauthorized(self):
+            """401 in OpenAI's error shape. Closes the connection so an
+            unread request body cannot desync a keep-alive socket."""
+            self.close_connection = True
+            return self._json(401, openai_error(
+                "missing or invalid AI API key; create one on /settings",
+                "invalid_request_error", "invalid_api_key"),
+                self._ai_headers({"WWW-Authenticate": "Bearer",
+                                  "Connection": "close"}))
+
+        def _stream_ai(self, up) -> None:
+            """Pass an upstream SSE stream through as chunked SSE."""
+            self.send_response(up.status)
+            self.send_header("Content-Type",
+                             up.content_type or "text/event-stream")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Transfer-Encoding", "chunked")
+            self.send_header("Connection", "close")
+            for k, v in AI_CORS.items():
+                self.send_header(k, v)
+            self.end_headers()
+            self.close_connection = True
+            try:
+                for line in up.iter_lines():
+                    if not line:
+                        continue
+                    self.wfile.write(f"{len(line):X}\r\n".encode("ascii"))
+                    self.wfile.write(line)
+                    self.wfile.write(b"\r\n")
+                    self.wfile.flush()
+                self.wfile.write(b"0\r\n\r\n")
+                self.wfile.flush()
+            except (BrokenPipeError, ConnectionResetError):
+                pass
+            finally:
+                up.close()
+
         def _authed(self) -> bool:
             token = self.headers.get("X-Pair-Key", "")
             if check_token(token):
@@ -924,6 +993,21 @@ def make_handler():
                     pass
 
         # -- routes ---------------------------------------------------------
+        def do_OPTIONS(self):
+            """CORS preflight for /v1/* (no credentials, no data)."""
+            p = urlparse(self.path).path
+            if p.startswith("/v1/"):
+                self.send_response(204)
+                for k, v in AI_CORS.items():
+                    self.send_header(k, v)
+                self.send_header("Access-Control-Max-Age", "86400")
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
+            self.send_response(404)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
         def do_GET(self):
             u = urlparse(self.path)
             p = u.path
@@ -982,6 +1066,40 @@ def make_handler():
                 if not self._api_authed():
                     return self._json(401, {"error": "owner key or PIN required"})
                 return self._json(200, {"pools": BRIDGE.pool_list()})
+            if p in ("/settings", "/settings/"):
+                # Owner settings page. Pairing key only: a PIN session is
+                # dashboard-only access, too weak to mint credentials.
+                if not self._authed():
+                    login = LOGIN_HTML.replace(
+                        'action="/login"', 'action="/login?next=/settings"')
+                    return self._send(200, login.encode(),
+                                      "text/html; charset=utf-8")
+                html = (SETTINGS_FILE.read_text() if SETTINGS_FILE.exists()
+                        else "<h1>Monico Labs</h1><p>settings.html missing</p>")
+                return self._send(200, html.encode(), "text/html; charset=utf-8")
+            if p == "/api/ai-keys":
+                # AI API keys: owner key only, never a PIN session.
+                if not self._authed():
+                    return self._json(401, {"error": "owner key required"})
+                return self._json(200, {"keys": BRIDGE.ai_keys.list()})
+            if p == "/api/local-apps":
+                # The local app shelf: owner key or PIN session.
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                return self._json(200, {"apps": BRIDGE.local_apps.list()})
+            if p == "/v1/models":
+                # OpenAI-compatible: authenticated by an mk-ai key from
+                # the settings page, NOT the pairing key.
+                if not self._ai_authed():
+                    return self._ai_unauthorized()
+                return self._json(200, {"object": "list",
+                                        "data": BRIDGE.ai_gateway.models()},
+                                  self._ai_headers())
+            if p == "/api/ai-engine":
+                # Dashboard AI engine status (owner key or PIN session).
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                return self._json(200, {"engine": BRIDGE.ai_gateway.status()})
             if not self._authed():
                 if p == "/":
                     return self._send(200, LOGIN_HTML.encode(), "text/html; charset=utf-8")
@@ -1020,7 +1138,7 @@ def make_handler():
                 key = (form.get("key") or [""])[0]
                 if check_token(key):
                     nxt = (parse_qs(u.query).get("next") or ["/"])[0]
-                    if nxt != "/dashboard":   # fixed allow-list, no open redirect
+                    if nxt not in ("/dashboard", "/settings"):   # fixed allow-list, no open redirect
                         nxt = "/"
                     return self._send(303, b"", "text/plain",
                                       {"Location": nxt,
@@ -1077,6 +1195,79 @@ def make_handler():
                                        mode=body.get("mode", "split"),
                                        timeout_s=float(body.get("timeout_s", 60)))
                 return self._json(400 if "error" in res else 200, res)
+            if p == "/api/ai-keys":
+                # Create an AI API key. The plaintext key is returned by
+                # this one response and never again: only its hash is kept.
+                if not self._authed():
+                    return self._json(401, {"error": "owner key required"})
+                res = BRIDGE.ai_keys.create(self._body().get("name", ""))
+                return self._json(400 if "error" in res else 200, res)
+            if p == "/api/ai-keys/delete":
+                if not self._authed():
+                    return self._json(401, {"error": "owner key required"})
+                res = BRIDGE.ai_keys.revoke(self._body().get("id", ""))
+                return self._json(404 if "error" in res else 200, res)
+            if p == "/api/local-apps":
+                # Add a repo, app or piece of software that runs locally.
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                b = self._body()
+                res = BRIDGE.local_apps.add(b.get("name", ""), b.get("kind", ""),
+                                            b.get("path", ""), b.get("url", ""))
+                return self._json(400 if "error" in res else 200, res)
+            if p == "/api/local-apps/delete":
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                res = BRIDGE.local_apps.remove(self._body().get("id", ""))
+                return self._json(404 if "error" in res else 200, res)
+            if p == "/api/ai-engine/start":
+                # Explicit dashboard start: spawns llama-server and returns;
+                # the panel polls /api/ai-engine while the model loads.
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                res = BRIDGE.ai_gateway.start()
+                if "error" in res:
+                    code = 409 if res.get("code") == "engine_external" else 503
+                    return self._json(code, res)
+                return self._json(200, res)
+            if p == "/api/ai-engine/stop":
+                # Only stops a llama-server this bridge started.
+                if not self._api_authed():
+                    return self._json(401, {"error": "owner key or PIN required"})
+                res = BRIDGE.ai_gateway.stop()
+                if "error" in res:
+                    return self._json(409, res)
+                return self._json(200, res)
+            if p in ("/v1/chat/completions", "/v1/completions"):
+                # OpenAI-compatible chat/completion endpoint. mk-ai key
+                # auth, forwarded to the installed llama.cpp model.
+                if not self._ai_authed():
+                    return self._ai_unauthorized()
+                body = self._body()
+                if p == "/v1/chat/completions" and not isinstance(
+                        body.get("messages"), list):
+                    return self._json(400, openai_error(
+                        "messages must be a list of chat messages"),
+                        self._ai_headers())
+                if p == "/v1/completions" and not body.get("prompt"):
+                    return self._json(400, openai_error(
+                        "prompt is required"), self._ai_headers())
+                body.setdefault("model", MODEL_ALIAS)
+                try:
+                    up = BRIDGE.ai_gateway.post(p, body)
+                except GatewayError as exc:
+                    log(f"ai {p} -> {exc.status}: {exc}")
+                    return self._json(exc.status, exc.payload,
+                                      self._ai_headers())
+                if body.get("stream"):
+                    return self._stream_ai(up)
+                try:
+                    data = up.read()
+                finally:
+                    up.close()
+                return self._send(up.status, data,
+                                  up.content_type or "application/json",
+                                  self._ai_headers())
             if not self._authed():
                 return self._json(401, {"error": "bad pairing key"})
             body = self._body()
@@ -1153,22 +1344,64 @@ def _termux_connect_block(lan_ip: str | None, port: int, key: str) -> str:
     )
 
 
+TARBALL_FILES = ("monico-connect", "monico-cmd", "monico-model",
+                 "install-termux.sh")
+_TARBALL_CACHE: dict = {"sig": None, "data": b""}
+_TARBALL_LOCK = threading.Lock()
+
+
+def _repo_tarball_signature(root: Path) -> tuple:
+    """Fingerprint of the files that go into the install tarball.
+    Checking it is a directory walk; rebuilding is tar+gzip of the
+    whole tree, so an unchanged checkout is served from cache."""
+    sig = []
+    for rel in ("bridge", "ui"):
+        for f in sorted((root / rel).rglob("*")):
+            if not f.is_file() or "__pycache__" in f.parts:
+                continue
+            st = f.stat()
+            sig.append((str(f.relative_to(root)), st.st_mtime_ns,
+                        st.st_size))
+    for name in TARBALL_FILES:
+        f = root / name
+        if f.exists():
+            st = f.stat()
+            sig.append((name, st.st_mtime_ns, st.st_size))
+    return tuple(sig)
+
+
 def _repo_tarball_bytes() -> bytes:
     """Gzipped tar of the files install-termux.sh needs (bridge/, ui/,
     the launchers, the installer itself), built from this checkout so
     the phone gets the exact code this server runs. No GitHub, no
-    internet on the phone."""
+    internet on the phone.
+
+    Cached until a source file changes; __pycache__/.pyc are excluded
+    (the phone has its own interpreter, and bytecode for this box is
+    dead weight over the LAN)."""
     import io
     import tarfile
     root = Path(__file__).resolve().parent.parent
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
-        for rel in ("bridge", "ui"):
-            tf.add(root / rel, arcname=rel)
-        for name in ("monico-connect", "monico-cmd", "monico-model",
-                     "install-termux.sh"):
-            tf.add(root / name, arcname=name)
-    return buf.getvalue()
+    sig = _repo_tarball_signature(root)
+    if _TARBALL_CACHE["sig"] == sig:
+        return _TARBALL_CACHE["data"]
+    with _TARBALL_LOCK:
+        if _TARBALL_CACHE["sig"] == sig:
+            return _TARBALL_CACHE["data"]
+
+        def keep(info):
+            return None if ("__pycache__" in Path(info.name).parts
+                            or info.name.endswith(".pyc")) else info
+
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tf:
+            for rel in ("bridge", "ui"):
+                tf.add(root / rel, arcname=rel, filter=keep)
+            for name in TARBALL_FILES:
+                tf.add(root / name, arcname=name, filter=keep)
+        _TARBALL_CACHE["sig"] = sig
+        _TARBALL_CACHE["data"] = buf.getvalue()
+        return _TARBALL_CACHE["data"]
 
 
 def serve(port: int, join_url: str | None = None, join_key: str | None = None,

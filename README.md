@@ -1,5 +1,7 @@
 # Monico Labs Bridge: Termux <-> Linux
 
+[![tests](https://github.com/jaykk99/linuxtomux/actions/workflows/tests.yml/badge.svg)](https://github.com/jaykk99/linuxtomux/actions/workflows/tests.yml)
+
 Turn a phone into a server, and pair it with a Linux box. One bridge,
 two commands, a Monico Labs homescreen, and an optional installer that
 puts the biggest uncensored model each device can run right on the
@@ -80,6 +82,30 @@ can run):
 ```sh
 monico-model install
 ```
+
+## Old and new devices
+
+- **Python 3.7 or newer** on both ends (Debian 10, Ubuntu 20.04,
+  Raspberry Pi OS, any current Termux). Still no pip installs.
+  `tests/test_compat.py` keeps 3.8/3.9/3.10-only conveniences out of
+  `bridge/`.
+- **Any OpenAI-compatible engine** behind `MONICO_LLAMA_URL`: recent
+  llama.cpp (which answers `/health`), older llama.cpp builds, Ollama,
+  LM Studio and vLLM (which answer `/v1/models`) are all accepted as
+  ready. The URL may be the server root or its `/v1` base; both work,
+  and `/v1/models` lists the external server's models next to the
+  local one.
+- **A model you already have**: set `MONICO_MODEL_FILE=/path/model.gguf`
+  and the bridge serves that file (no re-download) with the same
+  dashboard start/stop controls.
+- **Old phones and browsers**: the UI avoids the newest DOM helpers
+  (`flatMap`, `replaceChildren`) and honours `prefers-reduced-motion`.
+  `/v1/*` sends CORS headers and answers `OPTIONS`, so a browser-based
+  AI client on the phone can call the endpoint (the key is still
+  required for every request).
+- **Odd or old hardware**: no `lsblk`, Android hiding `/proc/stat`, old
+  kernels, USB drives and 32-bit ARM all keep working with honest
+  numbers rather than crashes.
 
 ## The two commands
 
@@ -213,6 +239,58 @@ phone-friendly tiles show:
   `~/monico-host/` on the phone and it is hosted, owner-only.
 - **Models**: the local model installed on each device (name, quant,
   size), or a plain "run monico-model install" note when there is none.
+
+## Settings: AI keys and local apps
+
+Open **Settings** in the homescreen nav (or `/settings`; same pairing
+key). **AI API keys**: name a key and create it. The key is shown once
+and only its SHA-256 hash is saved to `~/.monico-bridge/ai-keys.json`
+(0600), so the page can list each key by name and prefix but can never
+show the key again; **Revoke** deletes it. PIN sessions cannot mint or
+list keys: that page needs the pairing key.
+
+**Apps → Local software** registers repos, apps and software that run
+on this box: a name, a kind (repo / app / software), an absolute local
+path and/or a repo URL, saved to
+`~/.monico-bridge/local-apps.json` (0600). The server checks the path
+every time the list loads, so a git checkout or folder shows **Ready**
+and a path that disappeared shows **Missing** with the reason instead
+of a stale tick. Adding or removing an entry never touches the files on
+disk and starts nothing.
+
+### AI endpoint (OpenAI-compatible)
+
+The keys above open the bridge's own OpenAI-compatible endpoint. Point
+any OpenAI client at `http://<this-box>:8765/v1` and send the key as
+`Authorization: Bearer mk-ai-...`:
+
+```sh
+curl -s http://127.0.0.1:8765/v1/models -H "Authorization: Bearer mk-ai-..."
+
+curl -s http://127.0.0.1:8765/v1/chat/completions \
+  -H "Authorization: Bearer mk-ai-..." -H 'Content-Type: application/json' \
+  -d '{"model":"monico-local","messages":[{"role":"user","content":"hi"}]}'
+```
+
+Requests are forwarded to a llama.cpp server. By default the bridge
+starts `llama-server` lazily from the model `monico-model install` put
+on the device (the first request waits for the model to load; later
+ones go straight through) on `127.0.0.1:8080`. Set `MONICO_LLAMA_URL`
+to reuse a llama-server you already run instead: nothing is started
+then. `GET /v1/models` and `POST /v1/chat/completions` are served, plus
+`POST /v1/completions`; `"stream": true` is passed through as SSE.
+Revoking a key stops it immediately. No installed model, no
+`llama-server` binary, or an engine that dies while loading answers
+503 with the real reason in OpenAI's error shape.
+
+The dashboard's **AI engine** panel shows that engine's real state
+(running / starting / stopped / external, model, PID, uptime, log) and
+**Start** / **Stop** manage it explicitly. Start returns at once and
+the panel polls while the model loads; Stop only ever stops a
+llama-server this bridge started, and says so plainly when the engine
+is external (`MONICO_LLAMA_URL`) or was started elsewhere. The same
+status is at `GET /api/ai-engine` (owner key or PIN session), with
+`POST /api/ai-engine/start` and `POST /api/ai-engine/stop`.
 
 ## Dashboard (live specs, every device)
 
@@ -431,11 +509,14 @@ bridge/server.py     Linux side: registry, mesh sync, relay, homescreen
 bridge/client.py     Termux side: channel + the phone's hosted service
 bridge/cli.py        command-line entry points
 bridge/tunnel.py     Cloudflare quick tunnel for --public
+bridge/ai_gateway.py OpenAI-compatible /v1 endpoint (mk-ai keys) -> llama.cpp
+bridge/settings.py   AI API keys (hashed) + the local app shelf
 bridge/specs.py      live specs each device reports (RAM, storage, CPU, OS, uptime, battery)
 bridge/model_installer.py + hwdetect.py   hardware tiers, installer
 ui/homescreen.html   the Monico Labs homescreen
 bridge/pools.py      paired devices: shared specs, how the one terminal deals commands out
 ui/dashboard.html    the live device dashboard (/dashboard)
+ui/settings.html     owner settings: AI API keys (/settings)
 install-linux.sh / install-termux.sh
 tests/               unit tests + run_proof.sh + run_mesh_proof.sh proofs
 integrations/termux-code/
@@ -460,3 +541,22 @@ side ageing to offline when a server is killed (with the survivor
 still working), and the mesh healing when it rejoins. Output:
 `proof/mesh-proof-output.txt`. Mesh unit tests:
 `python3 tests/test_mesh.py`.
+
+Run every test module with a built-in runner (no pytest needed):
+
+```sh
+./tests/run_all.sh
+```
+
+With pytest installed, `python3 -m pytest tests/ -q` runs everything.
+`tests/test_compat.py` is the old-device guard: it parses `bridge/`
+with the Python 3.7 grammar and rejects newer-only helpers, so a
+convenience added on a modern dev box cannot silently raise the floor.
+
+CI (`.github/workflows/tests.yml`) runs this same script on every push
+and pull request, against Python 3.7 (the floor) and the current
+stable Python. After those pass, a smoke job starts the real server on
+a throwaway home and checks `/health`, `/settings`, `/api/ai-keys`,
+`/v1/models`, `/api/ai-engine` and the install tarball, so route wiring
+is covered as well as the internals. Run it locally with
+`python3 tests/smoke.py` (no model or network needed).

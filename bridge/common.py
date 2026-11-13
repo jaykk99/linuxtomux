@@ -37,16 +37,22 @@ def ensure_data_dir() -> Path:
 
 
 def get_or_create_key() -> tuple[str, bool]:
-    """Same pattern as linux-remote: one bearer key, 0600, shown once."""
+    """Same pattern as linux-remote: one bearer key, 0600, shown once.
+
+    The create is O_EXCL, so two processes starting at once (a busy
+    phone, a server restarted while a client runs) cannot mint two
+    different keys for the same box."""
     ensure_data_dir()
     if KEY_FILE.exists():
         return KEY_FILE.read_text().strip(), False
     key = secrets.token_urlsafe(32)
-    KEY_FILE.write_text(key + "\n")
     try:
-        KEY_FILE.chmod(0o600)
-    except OSError:
-        pass
+        fd = os.open(str(KEY_FILE), os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                     0o600)
+    except FileExistsError:
+        return KEY_FILE.read_text().strip(), False
+    with os.fdopen(fd, "w") as fh:
+        fh.write(key + "\n")
     return key, True
 
 
@@ -163,17 +169,60 @@ def load_json(path: Path) -> dict:
 
 
 def save_json(path: Path, data: dict, mode: int = 0o600) -> None:
+    """Write JSON atomically: serialise first, replace in one step.
+
+    A crash, a killed process or a phone dying mid-write can never leave
+    a half-written keys/settings/pools file behind: readers see either
+    the old file or the complete new one."""
     ensure_data_dir()
-    path.write_text(json.dumps(data, indent=2) + "\n")
+    text = json.dumps(data, indent=2) + "\n"
+    tmp = path.with_name(f".{path.name}.{secrets.token_hex(6)}.tmp")
     try:
-        path.chmod(mode)
-    except OSError:
-        pass
+        tmp.write_text(text)
+        try:
+            tmp.chmod(mode)
+        except OSError:
+            pass
+        os.replace(str(tmp), str(path))
+    finally:
+        try:
+            if tmp.exists():
+                tmp.unlink()
+        except OSError:
+            pass
+
+
+MODEL_FILE_ENV = "MONICO_MODEL_FILE"
+
+
+def installed_model(config_path: Path | None = None) -> dict | None:
+    """The model this device should serve, if its weights really exist.
+
+    $MONICO_MODEL_FILE wins: point it at a GGUF another tool already
+    downloaded (an SD card, a shared folder, an older setup) and the
+    bridge serves that file without re-downloading anything. Otherwise
+    the installer's model.json is used, and only while the file it names
+    is still on disk.
+    """
+    cfg = load_json(config_path or MODEL_CONFIG)
+    override = os.environ.get(MODEL_FILE_ENV, "").strip()
+    if override:
+        path = Path(override).expanduser()
+        if path.exists():
+            out = dict(cfg) if cfg else {}
+            out["file"] = str(path)
+            out.setdefault("model", path.stem)
+            out.setdefault("quant", "external")
+            out["source"] = MODEL_FILE_ENV
+            return out
+    if not cfg or not cfg.get("file") or not Path(cfg["file"]).exists():
+        return None
+    return cfg
 
 
 def model_status() -> dict:
     """What the model installer recorded for THIS device, if anything."""
-    cfg = load_json(MODEL_CONFIG)
+    cfg = installed_model()
     if not cfg:
         return {"installed": False}
     return {"installed": True, **cfg}

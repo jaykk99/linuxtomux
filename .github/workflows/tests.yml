@@ -1,0 +1,52 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: Python ${{ matrix.python }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Python 3.7 needs an older runner image; setup-python still
+          # publishes 3.7 builds for it. This is the repo's stated floor.
+          - os: ubuntu-22.04
+            python: "3.7"
+          # Current stable release, whatever it is at the time of the run.
+          - os: ubuntu-latest
+            python: "3.x"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Interpreter
+        run: python -V
+
+      - name: Compile and run every test suite
+        run: sh tests/run_all.sh
+
+  smoke:
+    name: Runtime smoke
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Start the bridge and exercise its endpoints
+        run: python3 tests/smoke.py
