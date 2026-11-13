@@ -15,13 +15,12 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-import sys
 import time
 import urllib.request
 from pathlib import Path
 
 from .common import DATA_DIR, MODEL_CONFIG, ensure_data_dir, save_json
-from .hwdetect import PROFILES, detect, usable_ram_gb
+from .hwdetect import detect, usable_ram_gb
 from .storage import choose_model_storage
 
 MODELS_DIR = DATA_DIR / "models"
@@ -118,7 +117,10 @@ def _download(url: str, dest: Path) -> tuple[bool, str]:
         tmp.rename(dest)
         return True, f"{dest.stat().st_size / 1e9:.2f} GB"
     except Exception as exc:
-        tmp.unlink(missing_ok=True)
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
         return False, str(exc)
 
 

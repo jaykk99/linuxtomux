@@ -101,6 +101,9 @@
   .card .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
   .card .foot b{font-weight:600;color:var(--txt)}
   .note{margin-top:14px;border:1px dashed var(--line2);border-radius:8px;padding:12px;font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--mut)}
+  .enginemeta{font-family:var(--mono);font-size:11px;line-height:1.8;color:var(--dim);word-break:break-word}
+  .enginemeta b{font-weight:600;color:var(--txt)}
+  .enginemeta code{color:var(--txt)}
   .note code{color:var(--txt)}
   .empty-note{font-family:var(--mono);font-size:12px;color:var(--mut)}
   .panel + .panel{margin-top:20px}
@@ -165,6 +168,41 @@
   footer{max-width:1280px;margin:0 auto;padding:0 16px 32px;font-family:var(--mono);font-size:11px;color:var(--faint)}
   @media(min-width:768px){footer{padding:0 32px 32px}}
   @media(prefers-reduced-motion:reduce){.track i{transition:none}}
+  /* ---- 2026 refresh: signal light, depth and motion. Pure CSS: the
+     markup and data flow are unchanged, and older browsers simply keep
+     the flat console look (gradient text is behind @supports). ---- */
+  :root{--acid:#c6ff3d;--acid-line:rgba(198,255,61,.38);--acid-soft:rgba(198,255,61,.12)}
+  body{background:
+    radial-gradient(1100px 620px at 10% -12%, rgba(139,92,246,.16), transparent 60%),
+    radial-gradient(900px 520px at 90% -8%, rgba(34,211,238,.10), transparent 55%),
+    radial-gradient(760px 420px at 50% 112%, rgba(198,255,61,.06), transparent 60%),
+    var(--bg);
+    background-attachment:fixed}
+  body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+    background-size:52px 52px;
+    -webkit-mask-image:radial-gradient(circle at 50% 0%,#000,transparent 72%);
+    mask-image:radial-gradient(circle at 50% 0%,#000,transparent 72%)}
+  header.shell{background:rgba(7,7,7,.8)}
+  header.shell:after{content:"";display:block;height:1px;background:linear-gradient(90deg,transparent,var(--acid-line),rgba(139,92,246,.45),transparent)}
+  main,footer{position:relative;z-index:1}
+  .panel,.tile,.card,.stat,.pool{box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 26px 50px -34px rgba(0,0,0,.95)}
+  .panel-h h3:before{content:"";display:inline-block;width:6px;height:6px;margin-right:8px;border-radius:2px;background:var(--acid);box-shadow:0 0 14px var(--acid-line);vertical-align:middle}
+  nav.tabs a.active{border-bottom-color:var(--acid);color:#fff}
+  nav.tabs a:hover{border-bottom-color:rgba(198,255,61,.35)}
+  .btn.primary{background:linear-gradient(180deg,#fff 0%,#eaffd2 180%)}
+  .btn.primary:hover{background:var(--acid);box-shadow:0 0 26px var(--acid-line)}
+  .badge.ok .dot{animation:pulse 2.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 transparent}50%{opacity:.7;box-shadow:0 0 0 4px var(--acid-soft)}}
+  .card,.stat{transition:transform .18s ease,border-color .18s ease}
+  .card:hover,.stat:hover{transform:translateY(-2px);border-color:#333}
+  .mark{box-shadow:0 0 26px rgba(198,255,61,.10)}
+  .mark i{background:linear-gradient(135deg,#fff 20%,var(--acid))}
+  @supports ((background-clip:text) or (-webkit-background-clip:text)){
+    .stat .v{background:linear-gradient(180deg,#fff 0%,#bdbdbd 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
+  }
+  @media(max-width:520px){.stats{gap:10px}.stat{padding:12px}.stat .v{font-size:20px}.panel-b{padding:14px}}
+  @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none !important;transition:none !important}}
 </style>
 </head>
 <body>
@@ -186,6 +224,7 @@
       <a href="/#/apps">Apps</a>
       <a href="/#/hosted">Hosted</a>
       <a href="/#/models">Models</a>
+      <a href="/settings">Settings</a>
     </nav>
   </div>
 </header>
@@ -195,6 +234,20 @@
     <div class="stat"><div class="k">RAM in use</div><div class="v" id="st-ram">-</div><div class="s" id="st-ram-sub">across online devices</div></div>
     <div class="stat"><div class="k">Storage in use</div><div class="v" id="st-disk">-</div><div class="s" id="st-disk-sub">across online devices</div></div>
     <div class="stat"><div class="k">Lowest battery</div><div class="v" id="st-bat">-</div><div class="s" id="st-bat-sub">no battery reported</div></div>
+  </div>
+  <div class="panel" id="engine-panel">
+    <div class="panel-h">
+      <div><h3>AI engine</h3><p>llama.cpp server behind the OpenAI-compatible /v1 endpoint, on the model this device installed.</p></div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="badge" id="engine-badge">Loading</span>
+        <button class="btn secondary sm hidden" id="engine-stop" onclick="stopEngine()">Stop</button>
+        <button class="btn primary sm hidden" id="engine-start" onclick="startEngine()">Start</button>
+      </div>
+    </div>
+    <div class="panel-b">
+      <div class="enginemeta" id="engine-meta">Loading engine...</div>
+      <div class="note hidden" id="engine-hint"></div>
+    </div>
   </div>
   <div class="panel hidden" id="pools-panel">
     <div class="panel-h">
@@ -495,9 +548,90 @@ async function createPool(){
   }catch(e){ msg.textContent = "Could not reach the server."; }
 }
 
+/* ---- AI engine: explicit start/stop for llama-server ---- */
+var engineBusy = false, engineTimer = null;
+function engineUptime(ts){
+  var s = Math.max(0, Math.round(Date.now()/1000 - ts));
+  if(s >= 3600) return Math.floor(s/3600)+"h "+Math.floor(s%3600/60)+"m";
+  if(s >= 60) return Math.floor(s/60)+"m "+(s%60)+"s";
+  return s+"s";
+}
+function engineMeta(e){
+  var bits = [];
+  bits.push(e.installed
+    ? "Model: <b>"+esc(e.model||"installed model")+"</b>"+(e.quant ? " ("+esc(e.quant)+(e.size_gb!=null ? " · "+esc(e.size_gb)+" GB" : "")+")" : "")
+    : "Model: <b>none installed</b>");
+  bits.push("Upstream: <code>"+esc(e.upstream||"")+"</code> · "+(e.reachable ? "answering" : "not answering"));
+  if(e.pid) bits.push("PID <b>"+esc(e.pid)+"</b>"+(e.started_at ? " · up "+esc(engineUptime(e.started_at)) : ""));
+  if(e.log) bits.push("Log: <code>"+esc(e.log)+"</code>");
+  return bits.join("<br>");
+}
+var ENGINE_STATES = {
+  running:["ok","Running"], starting:["warn","Starting"], stopped:["","Stopped"],
+  external:["ok","External"], "running-external":["ok","Running (external)"],
+  "external-unreachable":["bad","Unreachable"]
+};
+function renderEngine(e){
+  var map = ENGINE_STATES[e.state] || ["", e.state || "Unknown"];
+  var badge = document.getElementById("engine-badge");
+  badge.className = "badge "+map[0];
+  badge.innerHTML = '<span class="dot"></span>'+esc(map[1]);
+  document.getElementById("engine-meta").innerHTML = engineMeta(e);
+  var hint = document.getElementById("engine-hint");
+  if(e.hint){ hint.className = "note"; hint.textContent = e.hint; }
+  else hint.className = "note hidden";
+  document.getElementById("engine-start").classList.toggle("hidden", !e.can_start || engineBusy);
+  document.getElementById("engine-stop").classList.toggle("hidden", !e.can_stop || engineBusy);
+}
+function scheduleEngine(ms){
+  if(engineTimer) clearTimeout(engineTimer);
+  engineTimer = setTimeout(loadEngine, ms);
+}
+async function loadEngine(){
+  try{
+    var r = await fetch("/api/ai-engine", {cache:"no-store"});
+    if(!r.ok) return;
+    var e = (await r.json()).engine || {};
+    renderEngine(e);
+    if(e.state === "starting" && !engineBusy) scheduleEngine(2500);
+  }catch(err){}
+}
+function engineNote(text){
+  var h = document.getElementById("engine-hint");
+  h.className = "note"; h.textContent = text;
+}
+async function startEngine(){
+  if(engineBusy) return;
+  engineBusy = true;
+  var err = "";
+  try{
+    var r = await fetch("/api/ai-engine/start", {method:"POST"});
+    var d = await r.json().catch(function(){ return {}; });
+    if(!r.ok || d.error) err = d.error || ("could not start (HTTP "+r.status+")");
+  }catch(e){ err = "request failed: "+e.message; }
+  engineBusy = false;
+  await loadEngine();
+  if(err) engineNote(err); else scheduleEngine(2000);
+}
+async function stopEngine(){
+  if(engineBusy) return;
+  if(!confirm("Stop llama-server? Any completion in flight is cut off.")) return;
+  engineBusy = true;
+  var err = "";
+  try{
+    var r = await fetch("/api/ai-engine/stop", {method:"POST"});
+    var d = await r.json().catch(function(){ return {}; });
+    if(!r.ok || d.error) err = d.error || ("could not stop (HTTP "+r.status+")");
+  }catch(e){ err = "request failed: "+e.message; }
+  engineBusy = false;
+  await loadEngine();
+  if(err) engineNote(err); else scheduleEngine(1200);
+}
+
 var lastOk = 0, cardHtml = {};
 function setBadge(cls, text){ var b=document.getElementById("live-badge"); b.className="badge "+cls; b.innerHTML='<span class="dot"></span>'+esc(text); }
 async function load(){
+  loadEngine();
   try{
     var r = await fetch("/api/devices", {cache:"no-store"});
     if(r.status===401){ location.href="/dashboard"; return; }
@@ -532,7 +666,10 @@ async function load(){
         if(oldBars.length===newBars.length){   // same shape: glide the bars
           newBars.forEach(function(nb,k){ var w=nb.style.width; nb.style.width=oldBars[k].style.width; requestAnimationFrame(function(){requestAnimationFrame(function(){nb.style.width=w})}); });
         }
-        el.className=fresh.className; el.replaceChildren.apply(el, Array.prototype.slice.call(fresh.childNodes));
+        el.className=fresh.className;
+        // replaceChildren is newer than some phone browsers; plain DOM APIs work everywhere.
+        while(el.firstChild) el.removeChild(el.firstChild);
+        Array.prototype.slice.call(fresh.childNodes).forEach(function(n){ el.appendChild(n); });
       }
       cardHtml[id]=html;
       if(grid.children[i]!==el) grid.insertBefore(el, grid.children[i]||null);

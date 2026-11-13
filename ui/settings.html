@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Monico Labs — Settings</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  /* Same Monico Labs console design system as homescreen.html. */
+  :root{
+    --bg:#070707; --panel:rgba(10,10,10,.6); --inset:#171717;
+    --line:#171717; --line2:#262626; --line3:#404040;
+    --txt:#e5e5e5; --strong:#f5f5f5;
+    --dim:#a3a3a3; --mut:#737373; --faint:#525252;
+    --ok-b:rgba(16,185,129,.25); --ok-bg:rgba(16,185,129,.10); --ok-t:#6ee7b7;
+    --bad-b:rgba(239,68,68,.25); --bad-bg:rgba(239,68,68,.10); --bad-t:#fca5a5;
+    --sans:"Inter Tight",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  ::selection{background:#fff;color:#000}
+  body{margin:0;background:var(--bg);color:var(--txt);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  a{color:inherit}
+
+  header.shell{position:sticky;top:0;z-index:30;background:rgba(10,10,10,.95);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .shell-in{max-width:1280px;margin:0 auto;padding:0 16px}
+  @media(min-width:768px){.shell-in{padding:0 32px}}
+  .bar{display:flex;height:64px;align-items:center;justify-content:space-between;gap:12px}
+  .brand{display:flex;align-items:center;gap:12px;text-decoration:none;min-width:0}
+  .mark{display:grid;place-items:center;width:36px;height:36px;flex:none;border:1px solid #262626;border-radius:12px;background:#171717}
+  .mark i{display:block;width:14px;height:14px;border-radius:3px;background:#fff;transform:rotate(45deg)}
+  .wordmark{line-height:1.25}
+  .wordmark .l1{display:block;font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.12em;color:#fff}
+  .wordmark .l2{display:block;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.18em;color:var(--mut)}
+  @media(max-width:560px){.wordmark{display:none}}
+  .bar-r{display:flex;align-items:center;gap:8px}
+
+  .badge{display:inline-flex;align-items:center;gap:6px;white-space:nowrap;border:1px solid var(--line2);border-radius:4px;padding:2px 8px;font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;background:var(--inset);color:var(--dim)}
+  .badge.ok{border-color:var(--ok-b);background:var(--ok-bg);color:var(--ok-t)}
+  .badge.bad{border-color:var(--bad-b);background:var(--bad-bg);color:var(--bad-t)}
+  .badge .dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:36px;padding:0 16px;border:0;border-radius:8px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s,opacity .15s}
+  .btn.primary{background:#fff;color:#0a0a0a;box-shadow:0 1px 3px rgba(0,0,0,.5)}
+  .btn.primary:hover{background:#e5e5e5}
+  .btn.secondary{border:1px solid #262626;background:#171717;color:var(--txt)}
+  .btn.secondary:hover{border-color:#404040}
+  .btn.sm{height:30px;padding:0 12px;font-size:10px}
+  .btn[disabled]{opacity:.45;cursor:wait}
+
+  nav.tabs{display:flex;gap:20px;overflow-x:auto;scrollbar-width:none}
+  nav.tabs::-webkit-scrollbar{display:none}
+  nav.tabs a{display:flex;align-items:center;gap:6px;white-space:nowrap;text-decoration:none;border-bottom:2px solid transparent;padding:14px 0;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);transition:color .15s}
+  nav.tabs a svg{width:14px;height:14px;flex:none}
+  nav.tabs a:hover{color:#d4d4d4}
+  nav.tabs a.active{border-bottom-color:#e5e5e5;color:#fff}
+
+  main{max-width:1280px;margin:0 auto;padding:32px 16px 56px}
+  @media(min-width:768px){main{padding:32px 32px 56px}}
+  .panel{border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+  .panel + .panel{margin-top:20px}
+  .panel-h{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:14px 20px}
+  .panel-h h3{margin:0;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:#d4d4d4}
+  .panel-h p{margin:2px 0 0;font-size:12px;color:var(--mut)}
+  .panel-b{padding:20px}
+
+  .form{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+  @media(min-width:720px){.form{grid-template-columns:repeat(3,minmax(0,1fr))}}
+  .form .field{display:flex;flex-direction:column;gap:6px;min-width:0}
+  .form .field.grow{grid-column:span 2}
+  .form label{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--mut)}
+  .form input,.form select{height:38px;border:1px solid var(--line2);border-radius:8px;background:#0a0a0a;padding:0 12px;font-family:var(--mono);font-size:12px;color:var(--strong);min-width:0}
+  .form input::placeholder{color:var(--faint)}
+  .form input:focus{outline:none;border-color:var(--line3)}
+  .form .actions{display:flex;align-items:flex-end}
+  .form-msg{font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--mut);word-break:break-word}
+  .form-msg.err{color:var(--bad-t)}
+  .form-msg.done{color:var(--ok-t)}
+  .endpoint{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);font-family:var(--mono);font-size:11px;line-height:1.8;color:var(--mut);word-break:break-word}
+  .endpoint code{color:var(--txt)}
+
+  .grid{display:grid;gap:16px}
+  @media(min-width:640px){.grid{grid-template-columns:repeat(2,1fr)}}
+  @media(min-width:1100px){.grid{grid-template-columns:repeat(3,1fr)}}
+  .tile{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px;min-width:0}
+  .tile .row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+  .tile .name{font-size:15px;font-weight:700;color:var(--strong);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tile .meta{margin-top:4px;font-family:var(--mono);font-size:11px;line-height:1.5;color:var(--mut);word-break:break-word}
+  .tile .foot{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px;font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+  .empty-note{font-family:var(--mono);font-size:12px;color:var(--mut)}
+
+  /* The revealed key: monospace, wraps, never truncated. */
+  .reveal{margin-top:16px;border:1px solid var(--ok-b);border-radius:10px;background:var(--ok-bg);padding:14px 16px}
+  .reveal .k{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.18em;text-transform:uppercase;color:var(--ok-t)}
+  .reveal code{display:block;margin-top:8px;font-family:var(--mono);font-size:13px;line-height:1.6;color:#fff;word-break:break-all;user-select:all}
+  .reveal .hint{margin-top:8px;font-size:11px;line-height:1.55;color:var(--ok-t);opacity:.85}
+  .reveal .acts{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap}
+  .hidden{display:none !important}
+  footer{max-width:1280px;margin:0 auto;padding:0 16px 32px;font-family:var(--mono);font-size:11px;color:var(--faint)}
+  @media(min-width:768px){footer{padding:0 32px 32px}}
+  /* ---- 2026 refresh: signal light, depth and motion. Pure CSS: the
+     markup and data flow are unchanged, and older browsers simply keep
+     the flat console look (gradient text is behind @supports). ---- */
+  :root{--acid:#c6ff3d;--acid-line:rgba(198,255,61,.38);--acid-soft:rgba(198,255,61,.12)}
+  body{background:
+    radial-gradient(1100px 620px at 10% -12%, rgba(139,92,246,.16), transparent 60%),
+    radial-gradient(900px 520px at 90% -8%, rgba(34,211,238,.10), transparent 55%),
+    radial-gradient(760px 420px at 50% 112%, rgba(198,255,61,.06), transparent 60%),
+    var(--bg);
+    background-attachment:fixed}
+  body:before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+    background-image:linear-gradient(rgba(255,255,255,.028) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.028) 1px,transparent 1px);
+    background-size:52px 52px;
+    -webkit-mask-image:radial-gradient(circle at 50% 0%,#000,transparent 72%);
+    mask-image:radial-gradient(circle at 50% 0%,#000,transparent 72%)}
+  header.shell{background:rgba(7,7,7,.8)}
+  header.shell:after{content:"";display:block;height:1px;background:linear-gradient(90deg,transparent,var(--acid-line),rgba(139,92,246,.45),transparent)}
+  main,footer{position:relative;z-index:1}
+  .panel,.tile{box-shadow:inset 0 1px 0 rgba(255,255,255,.045),0 26px 50px -34px rgba(0,0,0,.95)}
+  .panel-h h3:before{content:"";display:inline-block;width:6px;height:6px;margin-right:8px;border-radius:2px;background:var(--acid);box-shadow:0 0 14px var(--acid-line);vertical-align:middle}
+  nav.tabs a.active{border-bottom-color:var(--acid);color:#fff}
+  nav.tabs a:hover{border-bottom-color:rgba(198,255,61,.35)}
+  .btn.primary{background:linear-gradient(180deg,#fff 0%,#eaffd2 180%)}
+  .btn.primary:hover{background:var(--acid);box-shadow:0 0 26px var(--acid-line)}
+  .badge.ok .dot{animation:pulse 2.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:1;box-shadow:0 0 0 0 transparent}50%{opacity:.7;box-shadow:0 0 0 4px var(--acid-soft)}}
+  .tile{transition:transform .18s ease,border-color .18s ease}
+  .tile:hover{transform:translateY(-2px);border-color:#333}
+  .mark{box-shadow:0 0 26px rgba(198,255,61,.10)}
+  .mark i{background:linear-gradient(135deg,#fff 20%,var(--acid))}
+  @media(max-width:520px){.panel-b{padding:14px}}
+  @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none !important;transition:none !important}}
+</style>
+</head>
+<body>
+<header class="shell">
+  <div class="shell-in">
+    <div class="bar">
+      <a class="brand" href="/" aria-label="Monico Labs bridge home">
+        <span class="mark"><i></i></span>
+        <span class="wordmark"><span class="l1">MONICO LABS</span><span class="l2">CONSOLE MANAGEMENT SUITE</span></span>
+      </a>
+      <div class="bar-r">
+        <span class="badge ok"><span class="dot"></span>Owner</span>
+        <button class="btn primary" onclick="loadKeys()">Refresh</button>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="Sections">
+      <a href="/dashboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Dashboard</a>
+      <a href="/">Devices</a>
+      <a href="/#/apps">Apps</a>
+      <a href="/#/hosted">Hosted</a>
+      <a href="/#/models">Models</a>
+      <a href="/settings" class="active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3"/><path d="M1 14h6M9 8h6M17 16h6"/></svg>Settings</a>
+    </nav>
+  </div>
+</header>
+<main>
+  <div class="panel">
+    <div class="panel-h">
+      <div><h3>AI API keys</h3><p>Keys for your AI tools and agents. A key is shown once when it is created; this server stores only its hash.</p></div>
+      <span class="badge" id="key-count">0 keys</span>
+    </div>
+    <div class="panel-b">
+      <form class="form" id="key-form" onsubmit="return createKey(event)">
+        <div class="field grow"><label for="key-name">Name</label><input id="key-name" maxlength="60" placeholder="e.g. laptop agent" autocomplete="off" required></div>
+        <div class="actions"><button class="btn primary" type="submit" id="key-create">Create key</button></div>
+        <div class="field grow" style="grid-column:1/-1"><span class="form-msg" id="key-msg"></span></div>
+      </form>
+      <div class="endpoint">OpenAI-compatible endpoint: <code id="api-base">/v1</code> — send the key as <code>Authorization: Bearer &hellip;</code>.<br>Models: <code>GET /v1/models</code> &middot; chat: <code>POST /v1/chat/completions</code> (streaming supported) &middot; completions: <code>POST /v1/completions</code></div>
+
+      <div class="reveal hidden" id="key-reveal">
+        <div class="k">New key — shown once</div>
+        <code id="key-value"></code>
+        <div class="hint">Copy it now. It is stored hashed on this server, so it can never be shown again; if it is lost, revoke it and create a new one.</div>
+        <div class="acts">
+          <button class="btn secondary sm" onclick="copyKey()">Copy key</button>
+          <button class="btn secondary sm" onclick="hideReveal()">Done</button>
+          <span class="form-msg" id="copy-msg"></span>
+        </div>
+      </div>
+
+      <div id="keys" class="grid" style="margin-top:20px"><div class="tile"><div class="empty-note">Loading keys...</div></div></div>
+    </div>
+  </div>
+</main>
+<footer>Monico Labs. Owner access only. Keys live in ~/.monico-bridge/ai-keys.json (0600), hashed.</footer>
+<script>
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function fmtDate(ts){ try{ return new Date(ts*1000).toLocaleString(); }catch(e){ return ""; } }
+
+function showApiBase(){
+  var el = document.getElementById("api-base");
+  if(el && location.origin && location.origin !== "null") el.textContent = location.origin + "/v1";
+}
+function keyTile(k){
+  return `<div class="tile">
+    <div class="row"><div class="name">${esc(k.name)}</div><span class="badge ok"><span class="dot"></span>Active</span></div>
+    <div class="meta">Prefix: ${esc(k.prefix)}…<br>Created: ${esc(fmtDate(k.created))}</div>
+    <div class="foot"><span>AI key</span><button class="btn secondary sm" onclick="revokeKey('${esc(k.id)}')">Revoke</button></div>
+  </div>`;
+}
+async function loadKeys(){
+  const box = document.getElementById("keys");
+  try{
+    const r = await fetch("/api/ai-keys");
+    if(r.status === 401){ box.innerHTML = '<div class="tile"><div class="empty-note">Owner key required. Reload and sign in with the pairing key.</div></div>'; return; }
+    const d = await r.json();
+    const keys = d.keys || [];
+    document.getElementById("key-count").textContent = keys.length + (keys.length===1?" key":" keys");
+    box.innerHTML = keys.map(keyTile).join("") || '<div class="tile"><div class="empty-note">No keys yet. Create one above.</div></div>';
+  }catch(e){
+    box.innerHTML = '<div class="tile"><div class="empty-note">Keys unavailable: '+esc(e)+'</div></div>';
+  }
+}
+async function createKey(e){
+  e.preventDefault();
+  const btn = document.getElementById("key-create");
+  const msg = document.getElementById("key-msg");
+  const name = document.getElementById("key-name").value;
+  btn.disabled = true; msg.className = "form-msg"; msg.textContent = "Creating...";
+  try{
+    const r = await fetch("/api/ai-keys", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({name:name})});
+    const d = await r.json().catch(function(){ return {}; });
+    if(!r.ok || d.error || !d.key){
+      msg.className = "form-msg err"; msg.textContent = d.error || ("could not create the key (HTTP "+r.status+")");
+    } else {
+      document.getElementById("key-value").textContent = d.key;
+      document.getElementById("key-reveal").classList.remove("hidden");
+      document.getElementById("copy-msg").textContent = "";
+      msg.className = "form-msg done"; msg.textContent = "Created "+d.name+" ("+d.prefix+"…).";
+      document.getElementById("key-form").reset();
+      await loadKeys();
+    }
+  }catch(err){
+    msg.className = "form-msg err"; msg.textContent = "request failed: "+err;
+  }
+  btn.disabled = false;
+  return false;
+}
+async function revokeKey(id){
+  if(!confirm("Revoke this key? Anything using it stops working immediately.")) return;
+  try{
+    const r = await fetch("/api/ai-keys/delete", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({id:id})});
+    const d = await r.json().catch(function(){ return {}; });
+    if(!r.ok || d.error){ document.getElementById("key-msg").className = "form-msg err"; document.getElementById("key-msg").textContent = d.error || "could not revoke the key"; }
+    else { document.getElementById("key-msg").className = "form-msg done"; document.getElementById("key-msg").textContent = "Key revoked."; }
+  }catch(e){}
+  loadKeys();
+}
+function hideReveal(){
+  document.getElementById("key-reveal").classList.add("hidden");
+  document.getElementById("key-value").textContent = "";
+}
+function copyKey(){
+  const text = document.getElementById("key-value").textContent;
+  const note = document.getElementById("copy-msg");
+  function done(ok){ note.className = "form-msg "+(ok?"done":"err"); note.textContent = ok ? "Copied." : "Select the key and copy it manually."; }
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){ done(true); }, function(){ done(false); });
+  } else { done(false); }
+}
+showApiBase();
+loadKeys();
+</script>
+</body>
+</html>

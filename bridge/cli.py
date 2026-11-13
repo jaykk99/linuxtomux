@@ -14,7 +14,7 @@ import sys
 import urllib.error
 import urllib.request
 
-from .common import (CLIENT_CONFIG, DEFAULT_PORT, KEY_FILE, accepted_tokens,
+from .common import (CLIENT_CONFIG, DEFAULT_PORT, KEY_FILE,
                      get_or_create_key, load_json)
 from .hwdetect import PROFILES, detect
 from . import model_installer

@@ -3,3 +3,5 @@ tools-build/
 proof/models/
 *.part
 proof/install-home/models/
+.pytest_cache/
+.coverage
