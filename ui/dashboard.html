@@ -6,7 +6,7 @@
 <title>Monico Labs — Device dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
 <style>
   /* Same Monico Labs console design system as homescreen.html.
      Bars: neutral fill for a normal reading; the reserved status
@@ -204,6 +204,7 @@
   @media(max-width:520px){.stats{gap:10px}.stat{padding:12px}.stat .v{font-size:20px}.panel-b{padding:14px}}
   @media(prefers-reduced-motion:reduce){*,*:before,*:after{animation:none !important;transition:none !important}}
 </style>
+<link rel="stylesheet" href="/console.css">
 </head>
 <body>
 <header class="shell">
@@ -214,6 +215,7 @@
         <span class="wordmark"><span class="l1">MONICO LABS</span><span class="l2">CONSOLE MANAGEMENT SUITE</span></span>
       </a>
       <div class="bar-r">
+        <span class="hud-clock" id="hud-clock" aria-hidden="true">--:--:--</span>
         <span class="badge" id="live-badge"><span class="dot"></span>Loading</span>
         <button class="btn primary" onclick="load()">Refresh</button>
       </div>
@@ -226,9 +228,20 @@
       <a href="/#/models">Models</a>
       <a href="/settings">Settings</a>
     </nav>
+    <div class="ticker" aria-hidden="true"><div class="ticker-track">
+      <span>Live telemetry</span><span>5 second pulse</span><span>Local inference ready</span><span>Pairing key required</span><span>Monico Labs // 2026</span>
+      <span>Live telemetry</span><span>5 second pulse</span><span>Local inference ready</span><span>Pairing key required</span><span>Monico Labs // 2026</span>
+    </div></div>
   </div>
 </header>
 <main>
+  <div class="page-head">
+    <div>
+      <div class="eyebrow"><span class="pulse-dot"></span>Live telemetry <span class="sep">//</span> mesh control</div>
+      <h1 class="deck-title sm">Dashboard</h1>
+    </div>
+    <div class="page-chips"><span class="chip">Pair-secured</span><span class="chip">5s refresh</span></div>
+  </div>
   <div class="stats">
     <div class="stat"><div class="k">Devices online</div><div class="v" id="st-online">-</div><div class="s" id="st-online-sub">of - in the mesh</div></div>
     <div class="stat"><div class="k">RAM in use</div><div class="v" id="st-ram">-</div><div class="s" id="st-ram-sub">across online devices</div></div>
@@ -245,8 +258,16 @@
       </div>
     </div>
     <div class="panel-b">
-      <div class="enginemeta" id="engine-meta">Loading engine...</div>
-      <div class="note hidden" id="engine-hint"></div>
+      <div class="engine-grid">
+        <div class="engine-gauge" id="engine-gauge" data-state="loading" aria-hidden="true">
+          <span class="gauge-ticks"></span><span class="gauge-ring"></span>
+          <span class="gauge-core"><b id="engine-sigil">AI</b><small id="engine-label">BOOT</small></span>
+        </div>
+        <div>
+          <div class="enginemeta" id="engine-meta">Loading engine...</div>
+          <div class="note hidden" id="engine-hint"></div>
+        </div>
+      </div>
     </div>
   </div>
   <div class="panel hidden" id="pools-panel">
@@ -576,6 +597,14 @@ function renderEngine(e){
   var badge = document.getElementById("engine-badge");
   badge.className = "badge "+map[0];
   badge.innerHTML = '<span class="dot"></span>'+esc(map[1]);
+  var gauge = document.getElementById("engine-gauge");
+  if(gauge){
+    gauge.setAttribute("data-state", e.state || "stopped");
+    var labels = {running:"LIVE", starting:"LOAD", stopped:"IDLE", external:"EXT", "running-external":"EXT", "external-unreachable":"LOST"};
+    var sig = document.getElementById("engine-sigil"), lab = document.getElementById("engine-label");
+    if(sig) sig.textContent = "AI";
+    if(lab) lab.textContent = labels[e.state] || "AI";
+  }
   document.getElementById("engine-meta").innerHTML = engineMeta(e);
   var hint = document.getElementById("engine-hint");
   if(e.hint){ hint.className = "note"; hint.textContent = e.hint; }
@@ -703,6 +732,20 @@ async function runAll(){
 load();
 setInterval(function(){ if(!document.hidden) load(); }, REFRESH_MS);
 document.addEventListener("visibilitychange", function(){ if(!document.hidden) load(); });
+
+/* Deck chrome: UTC clock and the pointer spotlight. Visual only. */
+(function(){var c=document.getElementById("hud-clock");if(!c)return;function tick(){try{c.textContent=new Date().toISOString().slice(11,19)+" UTC"}catch(e){}}tick();setInterval(tick,1000)})();
+(function(){
+  if(!document.addEventListener) return;
+  if(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  document.addEventListener("pointermove", function(e){
+    var t=e.target; if(!t || !t.closest) return;
+    var el=t.closest(".tile,.card,.stat"); if(!el) return;
+    var r=el.getBoundingClientRect();
+    el.style.setProperty("--mx",(e.clientX-r.left)+"px");
+    el.style.setProperty("--my",(e.clientY-r.top)+"px");
+  }, {passive:true});
+})();
 </script>
 </body>
 </html>

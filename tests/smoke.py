@@ -120,18 +120,28 @@ def run():
               and health.get("service") == "monico-bridge",
               health)
 
+        status, body, headers = client.request("GET", "/console.css")
+        check("console stylesheet",
+              status == 200
+              and headers.get("Content-Type", "").startswith("text/css")
+              and b"--acid" in body,
+              "status %s" % status)
+
         status, body, _ = client.request("GET", "/", headers=owner)
         check("homescreen", status == 200 and b"Monico" in body,
               "status %s" % status)
 
         status, body, _ = client.request("GET", "/settings", headers=owner)
-        check("settings page", status == 200 and b"AI API keys" in body,
+        check("settings page",
+              status == 200 and b"AI API keys" in body
+              and b"/console.css" in body,
               "status %s" % status)
 
         status, body, _ = client.request("GET", "/settings")
         check("settings needs the owner key",
               status == 200 and b"next=/settings" in body
-              and b"AI API keys" not in body,
+              and b"AI API keys" not in body
+              and b"/console.css" in body,
               "status %s" % status)
 
         status, body, _ = client.request("GET", "/dashboard", headers=owner)
@@ -215,6 +225,7 @@ def run():
         check("tarball contents",
               "bridge/server.py" in names
               and "ui/settings.html" in names
+              and "ui/console.css" in names
               and "install-termux.sh" in names
               and not any("__pycache__" in n or n.endswith(".pyc")
                           for n in names),
