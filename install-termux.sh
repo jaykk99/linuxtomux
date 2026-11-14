@@ -19,6 +19,19 @@
 # at all it falls back to a git clone, which needs internet.
 set -eu
 
+# Python is the only thing the bridge needs. Termux does not ship it,
+# so fetch it with pkg (no root, no prompts) instead of failing later.
+if ! command -v python3 >/dev/null 2>&1; then
+  if command -v pkg >/dev/null 2>&1; then
+    echo "Installing python (pkg install python)..."
+    pkg install -y python >/dev/null || pkg install -y python
+  fi
+fi
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "ERROR: python3 not found. In Termux run: pkg install python" >&2
+  exit 1
+fi
+
 # Server + pair code arrive as args from a piped install, or as
 # env vars from the old long form. Never read a code from stdin: when
 # piped (curl | bash) stdin is the script itself. The normal flow
@@ -60,8 +73,12 @@ BIN_DIR="${PREFIX:-$HOME/../usr}/bin"
 mkdir -p "$APP_DIR" "$BIN_DIR" "$HOME/.monico-bridge" "$HOME/monico-host"
 
 SRC_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo "")"
-if [ -f "$SRC_DIR/monico-connect" ]; then
-  cp -r "$SRC_DIR/bridge" "$SRC_DIR/ui" "$APP_DIR/"
+# Fresh copy each time, so files removed upstream do not linger.
+fresh() { rm -rf "$APP_DIR/bridge" "$APP_DIR/ui"; cp -r "$1/bridge" "$1/ui" "$APP_DIR/"; }
+if [ "$SRC_DIR" = "$APP_DIR" ]; then
+  : # already installed here; just rewrite the launchers
+elif [ -f "$SRC_DIR/monico-connect" ]; then
+  fresh "$SRC_DIR"
   cp "$SRC_DIR"/monico-connect "$SRC_DIR"/monico-cmd "$SRC_DIR"/monico-model "$APP_DIR/"
 elif [ -n "${MONICO_SERVER:-}" ]; then
   # Same WiFi, no internet needed: the Linux box serves a tarball of
@@ -73,21 +90,24 @@ elif [ -n "${MONICO_SERVER:-}" ]; then
     rm -rf "$tmp"
     exit 1
   }
-  cp -r "$tmp/bridge" "$tmp/ui" "$APP_DIR/"
+  fresh "$tmp"
   cp "$tmp"/monico-connect "$tmp"/monico-cmd "$tmp"/monico-model "$APP_DIR/"
   rm -rf "$tmp"
 else
   REPO="${MONICO_REPO:-https://github.com/jaykk99/linuxtomux}"
   tmp="$(mktemp -d)"
   git clone --depth 1 "$REPO" "$tmp/repo"
-  cp -r "$tmp/repo/bridge" "$tmp/repo/ui" "$APP_DIR/"
+  fresh "$tmp/repo"
   cp "$tmp/repo"/monico-connect "$tmp/repo"/monico-cmd "$tmp/repo"/monico-model "$APP_DIR/"
   rm -rf "$tmp"
 fi
 
+# Termux has no /usr/bin/env, so launchers point straight at the
+# bash that is running this installer ($PREFIX/bin/bash on a phone).
+BASH_BIN="$(command -v bash || echo "$BIN_DIR/bash")"
 for cmd in monico-connect monico-cmd monico-model; do
   cat > "$BIN_DIR/$cmd" <<EOF
-#!/usr/bin/env bash
+#!$BASH_BIN
 cd "$APP_DIR" && exec python3 "$APP_DIR/$cmd" "\$@"
 EOF
   chmod +x "$BIN_DIR/$cmd" "$APP_DIR/$cmd"

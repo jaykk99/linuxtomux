@@ -11,6 +11,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -134,6 +135,16 @@ def blocked_reason(command: str) -> str | None:
     return None
 
 
+def _shell() -> str:
+    """A POSIX shell that exists here. Termux has no /bin/sh (it lives
+    in $PREFIX/bin), and stock Android keeps one in /system/bin."""
+    for cand in (os.environ.get("PREFIX", "") + "/bin/sh", "/bin/sh",
+                 "/system/bin/sh"):
+        if cand.startswith("/") and os.access(cand, os.X_OK):
+            return cand
+    return shutil.which("sh") or "/bin/sh"
+
+
 def run_command(command: str, timeout_s: int = 60) -> dict:
     """Run a shell command, capture bounded output. Used on both ends."""
     timeout_s = max(1, min(int(timeout_s or 60), 600))
@@ -145,7 +156,7 @@ def run_command(command: str, timeout_s: int = 60) -> dict:
     try:
         proc = subprocess.run(
             command, shell=True, capture_output=True, text=True,
-            timeout=timeout_s, executable="/bin/sh",
+            timeout=timeout_s, executable=_shell(),
         )
         out, err, code = proc.stdout, proc.stderr, proc.returncode
     except subprocess.TimeoutExpired as exc:
