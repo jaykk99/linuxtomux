@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>linuxtomux NN — model-fit predictor</title>
+<style>
+  :root { --bg:#0d1117; --panel:#161b22; --line:#30363d; --text:#e6edf3;
+          --muted:#8b949e; --green:#3fb950; --red:#f85149; --amber:#d29922;
+          --blue:#58a6ff; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text);
+         font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  header { padding:20px 24px 8px; }
+  h1 { margin:0 0 4px; font-size:22px; }
+  h2 { font-size:16px; margin:0 0 10px; }
+  .sub { color:var(--muted); font-size:13px; }
+  main { padding:12px 24px 40px; display:grid; gap:16px;
+         grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); }
+  .card { background:var(--panel); border:1px solid var(--line);
+          border-radius:8px; padding:16px; }
+  .wide { grid-column:1 / -1; }
+  .warn { background:#3a2b00; border:1px solid var(--amber); color:#ffd479;
+          border-radius:8px; padding:12px 16px; font-size:13px; }
+  .warn b { color:#fff; }
+  .metrics { display:flex; flex-wrap:wrap; gap:12px; }
+  .metric { flex:1 1 120px; background:#0d1117; border:1px solid var(--line);
+            border-radius:6px; padding:10px; }
+  .metric .v { font-size:22px; font-weight:700; }
+  .metric .k { color:var(--muted); font-size:12px; margin-top:2px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { border:1px solid var(--line); padding:6px 10px; text-align:left; }
+  th { color:var(--muted); font-weight:600; }
+  .bar-row { display:grid; grid-template-columns:170px 1fr 56px; gap:8px;
+             align-items:center; font-size:12px; margin:5px 0; }
+  .bar { height:12px; background:#0d1117; border:1px solid var(--line);
+         border-radius:3px; overflow:hidden; }
+  .bar > div { height:100%; background:var(--blue); }
+  .bar-row.neg .bar > div { background:var(--red); }
+  code { background:#0d1117; border:1px solid var(--line); border-radius:4px;
+         padding:1px 5px; font-size:12px; }
+  ul { margin:8px 0; padding-left:20px; font-size:13px; color:var(--muted); }
+  ul li { margin-bottom:4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>linuxtomux NN — model-fit predictor</h1>
+  <div class="sub">Predicts whether a (model, quant) from the installer CATALOG fits a
+  device's budget under <code>pick()</code>'s rule. Pure Python stdlib, zero
+  dependencies. Pre-check only: <code>pick()</code> stays the authority, this
+  model never installs anything.</div>
+</header>
+<main>
+  <div class="card wide warn" id="limits"><b>Limits.</b> <span id="limits-text"></span></div>
+  <div class="card">
+    <h2>Test metrics (held-out)</h2>
+    <div class="metrics" id="test-metrics"></div>
+  </div>
+  <div class="card">
+    <h2>Train metrics</h2>
+    <div class="metrics" id="train-metrics"></div>
+  </div>
+  <div class="card">
+    <h2>Dataset</h2>
+    <div id="dataset"></div>
+  </div>
+  <div class="card">
+    <h2>Confusion (test)</h2>
+    <div id="confusion"></div>
+  </div>
+  <div class="card wide">
+    <h2>Feature importance (test AUC drop when shuffled)</h2>
+    <div id="importance"></div>
+  </div>
+  <div class="card wide">
+    <h2>How to use</h2>
+    <ul>
+      <li><code>python3 -m nn.train</code> — retrain from the repo data, refreshes this page's numbers.</li>
+      <li><code>python3 -m nn.score --device android-8gb --all</code> — rank every catalog combo for a device.</li>
+      <li><code>python3 -m nn.score --device linux-vm-8gb --model Dolphin3.0-Llama3.1-8B --quant Q4_K_M</code> — score one triple.</li>
+    </ul>
+  </div>
+</main>
+<!-- NN-DATA-START -->
+<script type="application/json" id="nn-data">
+{
+  "trained_at": "2026-11-14T05:59:10.077384+00:00",
+  "layers": [
+    10,
+    8,
+    1
+  ],
+  "n_features": 10,
+  "feature_names": [
+    "params_b",
+    "size_gb",
+    "quant:Q4_K_M",
+    "quant:Q5_K_M",
+    "quant:Q8_0",
+    "quant_rank",
+    "usable_ram_gb",
+    "disk_free_gb",
+    "is_android",
+    "cpu_cores"
+  ],
+  "dataset": {
+    "devices": 6,
+    "combos_per_device": 9,
+    "train_rows": 54,
+    "n_positive": 37,
+    "n_negative": 17,
+    "picks_all_fit": true,
+    "n_picks": 6
+  },
+  "train_rows": 44,
+  "test_rows": 10,
+  "train_metrics": {
+    "n": 44,
+    "n_positive": 30,
+    "n_negative": 14,
+    "threshold": 0.5,
+    "accuracy": 0.9090909090909091,
+    "majority_baseline_accuracy": 0.6818181818181818,
+    "roc_auc": 0.9857142857142858,
+    "confusion": {
+      "tn": 10,
+      "fp": 4,
+      "fn": 0,
+      "tp": 30
+    },
+    "precision_fits": 0.8823529411764706,
+    "recall_fits": 1.0,
+    "f1_fits": 0.9375,
+    "precision_no_fit": 1.0,
+    "recall_no_fit": 0.7142857142857143,
+    "f1_no_fit": 0.8333333333333333
+  },
+  "test_metrics": {
+    "n": 10,
+    "n_positive": 7,
+    "n_negative": 3,
+    "threshold": 0.5,
+    "accuracy": 0.8,
+    "majority_baseline_accuracy": 0.7,
+    "roc_auc": 0.9523809523809523,
+    "confusion": {
+      "tn": 3,
+      "fp": 0,
+      "fn": 2,
+      "tp": 5
+    },
+    "precision_fits": 1.0,
+    "recall_fits": 0.7142857142857143,
+    "f1_fits": 0.8333333333333333,
+    "precision_no_fit": 0.6,
+    "recall_no_fit": 1.0,
+    "f1_no_fit": 0.7499999999999999
+  },
+  "history": {
+    "loss": [
+      0.7327433626257386,
+      0.7236625956224916,
+      0.7151967626846147,
+      0.7076085756613071,
+      0.7007278337118454,
+      0.6940816786904233,
+      0.6875942334068169,
+      0.6811717911828592,
+      0.6751736176466172,
+      0.6693938271934085,
+      0.6637269955148745,
+      0.6584475579412348,
+      0.6532340237659889,
+      0.6484147469941217,
+      0.6433947140700712,
+      0.6385886283714126,
+      0.6339803242013785,
+      0.6295947507802563,
+      0.6253166736314425,
+      0.621114680880123,
+      0.6167414416201275,
+      0.6126684867985073,
+      0.6085252050331984,
+      0.604610319094759,
+      0.6003986329986343,
+      0.5963433021677668,
+      0.5925263453542592,
+      0.5887382592693083,
+      0.5849956617354763,
+      0.5810417172814497,
+      0.5774022916579115,
+      0.5735663010506692,
+      0.5698418305777149,
+      0.5660441614765712,
+      0.5621946895196431,
+      0.5584102716256347,
+      0.5548541624930472,
+      0.5510225146492482,
+      0.5471529670921007,
+      0.5432126062644386,
+      0.5392331404021274,
+      0.5353578300237506,
+      0.5315381402127168,
+      0.5278120443710772,
+      0.5239165163403805,
+      0.5200557475674769,
+      0.516141075167578,
+      0.512380777747859,
+      0.5084767764006273,
+      0.5044696028107728,
+      0.5007340895722526,
+      0.4967675593116805,
+      0.4926550530258721,
+      0.48864376949237404,
+      0.48484275819248795,
+      0.48075481507210166,
+      0.47658349171475467,
+      0.47260307648139255,
+      0.46863290101464355,
+      0.46462958882795463,
+      0.4606083006146596,
+      0.4564890557784912,
+      0.4524812826503073,
+      0.4485652105266848,
+      0.4446626439280292,
+      0.4406594896674276,
+      0.43667970639310333,
+      0.43274204006789146,
+      0.4288261946567005,
+      0.42507681946724124,
+      0.42120582592176964,
+      0.4171887478700704,
+      0.4133736439560303,
+      0.40965321270601307,
+      0.405935514513234,
+      0.4023652799521374,
+      0.3988760043826352,
+      0.39513731116733786,
+      0.39144514631070104,
+      0.38791562993576834,
+      0.3843668546166464,
+      0.3808261459355172,
+      0.3773789397740705,
+      0.37384274994471217,
+      0.37045329498060053,
+      0.36708317403108626,
+      0.3638047943552152,
+      0.3605985016141641,
+      0.3573457437279084,
+      0.354136585241652,
+      0.35098005152257966,
+      0.3479302479009596,
+      0.3448265775030833,
+      0.34184935524135673,
+      0.3389960551338913,
+      0.3361176621380194,
+      0.33338857844767483,
+      0.33057328404122965,
+      0.32782024933900683,
+      0.32522063786764294,
+      0.32260739078155,
+      0.32012466624243713,
+      0.31766064225497825,
+      0.3151416822013155,
+      0.312715492900772,
+      0.3104065743736236,
+      0.3080794100690228,
+      0.305641091793123,
+      0.30342407600464355,
+      0.3011073244552725,
+      0.29898115162244665,
+      0.2968872856493578,
+      0.29475429652771246,
+      0.2926869002811131,
+      0.2906510029249229,
+      0.28867604522622387,
+      0.2867115361298858,
+      0.28485165811588664,
+      0.283002583782764,
+      0.281295288098602,
+      0.2794793642343083,
+      0.2775985487582587,
+      0.27580765424083314,
+      0.2741196987218064,
+      0.2724382765205055,
+      0.2707835087109387,
+      0.2692765633740273,
+      0.26766908411852086,
+      0.2661085553063376,
+      0.26455748344227337,
+      0.2630275746891057,
+      0.26149037480255016,
+      0.2600528670584036,
+      0.25861027629223643,
+      0.25719874656869296,
+      0.2557907298736128,
+      0.25441567051541675,
+      0.25312394893697576,
+      0.25184979099156685,
+      0.25058074525134433,
+      0.24932946366020572,
+      0.2480892468301515,
+      0.24688018980635168,
+      0.24570774622186395,
+      0.24448886726724606,
+      0.2433214969230764,
+      0.24220520539310905,
+      0.24106551986406458,
+      0.23998124205073837,
+      0.23891014291017285
+    ],
+    "train_acc": [
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.6818181818181818,
+      0.7045454545454546,
+      0.7045454545454546,
+      0.7045454545454546,
+      0.7045454545454546,
+      0.7272727272727273,
+      0.7272727272727273,
+      0.75,
+      0.7727272727272727,
+      0.7727272727272727,
+      0.7727272727272727,
+      0.7954545454545454,
+      0.7954545454545454,
+      0.7954545454545454,
+      0.7954545454545454,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8181818181818182,
+      0.8409090909090909,
+      0.8409090909090909,
+      0.8409090909090909,
+      0.8409090909090909,
+      0.8409090909090909,
+      0.8409090909090909,
+      0.8636363636363636,
+      0.8636363636363636,
+      0.8636363636363636,
+      0.8636363636363636,
+      0.8636363636363636,
+      0.8636363636363636,
+      0.8636363636363636,
+      0.8636363636363636,
+      0.8863636363636364,
+      0.8863636363636364,
+      0.8863636363636364,
+      0.8863636363636364,
+      0.8863636363636364,
+      0.8863636363636364,
+      0.8863636363636364,
+      0.8863636363636364,
+      0.8863636363636364,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091,
+      0.9090909090909091
+    ],
+    "val_acc": [
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.7,
+      0.8,
+      0.8,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.9,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8,
+      0.8
+    ]
+  },
+  "feature_importance": [
+    {
+      "feature": "usable_ram_gb",
+      "auc_drop": 0.2381
+    },
+    {
+      "feature": "params_b",
+      "auc_drop": 0.1429
+    },
+    {
+      "feature": "cpu_cores",
+      "auc_drop": 0.1429
+    },
+    {
+      "feature": "quant:Q4_K_M",
+      "auc_drop": 0.0952
+    },
+    {
+      "feature": "disk_free_gb",
+      "auc_drop": 0.0476
+    },
+    {
+      "feature": "size_gb",
+      "auc_drop": 0.0
+    },
+    {
+      "feature": "quant:Q5_K_M",
+      "auc_drop": 0.0
+    },
+    {
+      "feature": "quant:Q8_0",
+      "auc_drop": 0.0
+    },
+    {
+      "feature": "quant_rank",
+      "auc_drop": 0.0
+    },
+    {
+      "feature": "is_android",
+      "auc_drop": 0.0
+    }
+  ],
+  "limits": [
+    "Pre-check only. The model predicts whether a (model, quant) fits a device's budget; it never installs anything and never overrides pick() in bridge/model_installer.py, which stays the authority.",
+    "Labels are rule-derived: each row is labeled by pick()'s own budget rule (size <= min(usable/1.25, disk_free*0.5)) applied to the real CATALOG and the real device records. A high score means the network reproduced that threshold, not a discovery.",
+    "Small data: 54 rows (6 devices x 9 catalog combos), 37 fit / 17 no-fit. Test set is 10 rows, so one test row is 10% of test accuracy. Judge it by ROC AUC and the confusion counts, not accuracy.",
+    "Devices unseen in training (new RAM/disk numbers) are extrapolations; the model has no opinion beyond the raw features."
+  ],
+  "seed": 42,
+  "epochs": 150,
+  "lr": 0.05
+}
+</script>
+<!-- NN-DATA-END -->
+<script>
+const d = JSON.parse(document.getElementById('nn-data').textContent || '{}');
+function metric(el, k, v) {
+  const div = document.createElement('div');
+  div.className = 'metric';
+  div.innerHTML = '<div class="v"></div><div class="k"></div>';
+  div.querySelector('.v').textContent = v;
+  div.querySelector('.k').textContent = k;
+  document.getElementById(el).appendChild(div);
+}
+if (d.test_metrics) {
+  const t = d.test_metrics, tr = d.train_metrics;
+  metric('test-metrics', 'test accuracy', t.accuracy.toFixed(3));
+  metric('test-metrics', 'majority baseline', t.majority_baseline_accuracy.toFixed(3));
+  metric('test-metrics', 'test ROC AUC', t.roc_auc.toFixed(3));
+  metric('test-metrics', 'fits precision', t.precision_fits.toFixed(3));
+  metric('test-metrics', 'fits recall', t.recall_fits.toFixed(3));
+  metric('test-metrics', 'no-fit recall', t.recall_no_fit.toFixed(3));
+  metric('train-metrics', 'train accuracy', tr.accuracy.toFixed(3));
+  metric('train-metrics', 'train ROC AUC', tr.roc_auc.toFixed(3));
+  metric('train-metrics', 'layers', d.layers.join('-'));
+  metric('train-metrics', 'features', d.n_features);
+  metric('train-metrics', 'train rows', d.train_rows);
+  metric('train-metrics', 'test rows', d.test_rows);
+  document.getElementById('dataset').innerHTML =
+    '<table><tr><th>rows</th><td>' + d.dataset.train_rows + ' (' + d.dataset.devices +
+    ' devices x ' + d.dataset.combos_per_device + ' combos)</td></tr>' +
+    '<tr><th>fit / no-fit</th><td>' + d.dataset.n_positive + ' / ' + d.dataset.n_negative +
+    '</td></tr><tr><th>picks all fit</th><td>' + d.dataset.picks_all_fit +
+    '</td></tr><tr><th>trained</th><td>' + d.trained_at + '</td></tr></table>';
+  const c = t.confusion;
+  document.getElementById('confusion').innerHTML =
+    '<table><tr><th></th><th>predicted fits</th><th>predicted no-fit</th></tr>' +
+    '<tr><th>actually fits</th><td>' + c.tp + '</td><td>' + c.fn + '</td></tr>' +
+    '<tr><th>actually no-fit</th><td>' + c.fp + '</td><td>' + c.tn + '</td></tr></table>';
+  document.getElementById('importance').innerHTML = (d.feature_importance || []).map(f =>
+    '<div class="bar-row' + (f.auc_drop < 0 ? ' neg' : '') + '"><span>' + f.feature +
+    '</span><div class="bar"><div style="width:' +
+    Math.min(100, Math.max(0, f.auc_drop * 400)) + '%"></div></div><span>' +
+    f.auc_drop.toFixed(3) + '</span></div>').join('');
+  document.getElementById('limits-text').textContent = (d.limits || []).join(' ');
+} else {
+  document.getElementById('limits-text').textContent =
+    'Not trained yet — run python3 -m nn.train.';
+}
+</script>
+</body>
+</html>
