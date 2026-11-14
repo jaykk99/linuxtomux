@@ -498,8 +498,8 @@ body.auth-page{
 }
 @keyframes authRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
 .auth-brand{display:flex;align-items:center;gap:16px;margin-bottom:22px}
-.auth .mark{width:62px;height:62px;flex:none;border-radius:18px}
-.auth .mark i{width:24px;height:24px;border-radius:5px}
+.auth .mark{display:grid;place-items:center;width:62px;height:62px;flex:none;border-radius:18px}
+.auth .mark i{display:block;width:24px;height:24px;border-radius:5px}
 .auth-title{min-width:0}
 .auth-title h1{
   margin:0;font-family:var(--display);font-weight:700;text-transform:uppercase;
@@ -541,7 +541,7 @@ body.auth-page{
   border-color:rgba(200,255,46,.6);outline:none;
   box-shadow:0 0 0 3px rgba(200,255,46,.10),0 0 24px rgba(200,255,46,.14);
 }
-.auth-form .hint{margin-top:8px;font-family:var(--mono);font-size:10px;line-height:1.6;color:var(--faint)}
+.auth-form .hint{margin-top:8px;font-family:var(--mono);font-size:10px;line-height:1.6;color:var(--faint);text-wrap:balance}
 .auth-form .hint a{color:var(--acid);text-decoration:none;border-bottom:1px solid rgba(200,255,46,.4)}
 .auth-form button{
   margin-top:18px;height:46px;width:100%;border:1px solid rgba(200,255,46,.8);border-radius:10px;
@@ -552,6 +552,7 @@ body.auth-page{
 }
 .auth-form button:hover{background:#ddff7d;box-shadow:0 0 38px rgba(200,255,46,.42);transform:translateY(-1px)}
 .auth-form p{margin:12px 0 0;font-family:var(--mono);font-size:10px;line-height:1.6;color:var(--mut)}
+.auth-form .form-error{color:#ff7a7a;letter-spacing:.04em;text-wrap:balance}
 .auth-foot{
   display:flex;align-items:center;justify-content:space-between;gap:8px;
   margin-top:18px;padding-top:13px;border-top:1px solid rgba(255,255,255,.07);
@@ -560,12 +561,18 @@ body.auth-page{
 .auth-foot span:before{content:"\25C6";color:var(--acid);margin-right:6px;font-size:6px;vertical-align:1px}
 .auth-legal{
   margin-top:18px;text-align:center;font-family:var(--mono);font-size:8px;
-  letter-spacing:.24em;text-transform:uppercase;color:var(--faint);
+  letter-spacing:.24em;text-transform:uppercase;color:var(--faint);text-wrap:balance;
 }
+.auth-legal a{position:relative;white-space:nowrap}
+.auth-legal a:after{content:"";position:absolute;top:-10px;right:-6px;bottom:-10px;left:-6px}
 .auth-lead{margin:2px 0 18px;font-family:var(--mono);font-size:11px;color:var(--dim)}
 @media(max-width:480px){
   .auth-title h1{font-size:22px}
   .auth-form{padding:18px}
+  .auth-form input{font-size:16px}
+}
+@media(hover:none) and (pointer:coarse){
+  .auth-form input{font-size:16px}
 }
 
 /* ---- responsive / old-device safety ------------------------------------ */

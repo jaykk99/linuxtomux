@@ -1169,7 +1169,10 @@ def make_handler():
                     return self._send(303, b"", "text/plain",
                                       {"Location": nxt,
                                        "Set-Cookie": f"monico_key={key}; Path=/; HttpOnly; SameSite=Lax"})
-                return self._send(403, b"bad key", "text/plain")
+                err = LOGIN_HTML.replace(
+                    '<button type="submit">',
+                    '<p class="form-error">Invalid pairing key. Try again.</p><button type="submit">')
+                return self._send(403, err.encode(), "text/html; charset=utf-8")
             if p == "/pin-login":
                 # Dashboard PIN gate: no pairing key needed, the PIN
                 # itself is the credential. Never logs the PIN.
@@ -1181,7 +1184,9 @@ def make_handler():
                     return self._send(303, b"", "text/plain",
                                       {"Location": "/dashboard",
                                        "Set-Cookie": f"{PIN_COOKIE}={token}; Path=/; HttpOnly; SameSite=Lax"})
-                err = PIN_HTML.replace("</form>", "<p style='color:#ff5a5a'>Wrong PIN. Try again.</p></form>")
+                err = PIN_HTML.replace(
+                    '<button type="submit">',
+                    '<p class="form-error">Wrong PIN. Try again.</p><button type="submit">')
                 return self._send(403, err.encode(), "text/html; charset=utf-8")
             if p == "/pair-new":
                 # Mint a fresh 4-digit code for a running server (the
