@@ -1,0 +1,41 @@
+{
+  "exp_id": "exp-00001",
+  "config": {
+    "hidden": 4,
+    "lr": 0.01,
+    "l2": 0.0,
+    "epochs": 300,
+    "seed": 0
+  },
+  "test_acc": 0.8888888888888888,
+  "auc": 1.0,
+  "confusion": {
+    "tp": 6,
+    "fp": 1,
+    "tn": 2,
+    "fn": 0
+  },
+  "per_class_recall": {
+    "fits": 1.0,
+    "no_fit": 0.6666666666666666
+  },
+  "train_acc": 0.8444444444444444,
+  "layers": [
+    10,
+    4,
+    1
+  ],
+  "features": [
+    "params_b",
+    "size_gb",
+    "quant:Q4_K_M",
+    "quant:Q5_K_M",
+    "quant:Q8_0",
+    "quant_rank",
+    "usable_ram_gb",
+    "disk_free_gb",
+    "is_android",
+    "cpu_cores"
+  ],
+  "updated": "2026-11-14T22:40:31Z"
+}
