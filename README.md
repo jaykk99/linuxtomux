@@ -8,28 +8,35 @@ puts the biggest uncensored model each device can run right on the
 device. Pure Python standard library on both ends: no pip installs, no
 builds, nothing to pay for, no keys to buy.
 
-## Quickstart: 2 steps, no IP needed
+## Pick your setup first
 
-**Step 1 — Linux.** Copy-paste this whole block as-is. It updates
-the checkout first (a stale copy is the #1 setup failure: old versions
-do not have `--public` at all and silently ignore the flag), then
-installs, then starts the server. The server prints a **4-digit code**,
-big and clear:
+There are two ways to connect. Pick the one that matches your Linux box.
+The wrong pick is the most common reason the phone never finds the server.
+
+**A. Regular Linux box, phone on the same WiFi.**
+The phone finds the server by itself. No IP to type.
+
+**B. Chromebook, or phone somewhere else.**
+Use a public link instead. On a Chromebook the Linux container sits
+behind its own network, so the phone cannot find it over WiFi. Same fix
+if the phone is on different WiFi or mobile data.
+
+## Path A: same WiFi
+
+Step 1, on Linux. Update first, then install, then start. The
+server prints a 4-digit code, big and clear.
 
 ```sh
-if [ -d ~/linuxtomux/.git ]; then cd ~/linuxtomux && git pull; else git clone https://github.com/jaykk99/linuxtomux.git ~/linuxtomux && cd ~/linuxtomux; fi
+# first time only
+git clone https://github.com/jaykk99/linuxtomux.git
+cd linuxtomux
+# every time after that
+cd ~/linuxtomux && git pull
 ./install-linux.sh
 monico-server start
 ```
 
-`install-linux.sh` copies the app to `~/.monico-bridge/app` and puts
-`monico-server`, `monico-cmd`, `monico-model`, and `monico-pair` in
-`~/.local/bin`. The code is good for 10 minutes and one use; a fresh
-one any time with `monico-pair` (no restart needed).
-
-**Step 2 — Termux.** Install the repo on the phone, then connect.
-The phone finds the Linux box on the local network by itself: no IP
-to type, nothing to paste:
+Step 2, on the phone (Termux). Install the repo, then connect.
 
 ```sh
 pkg install python git
@@ -39,105 +46,105 @@ cd linuxtomux
 monico-connect
 ```
 
-`monico-connect` asks for the 4-digit code from the Linux screen.
-Type it in and the phone connects OUT to the Linux box and stays
-connected. From that moment the phone is a server too: its commands,
-its status page, and its hosted files are reachable through the
-bridge.
+Type the 4-digit code when it asks. Done. The phone stays connected
+and shows up on the dashboard.
 
-**Check it worked.** Open the dashboard URL the server printed and
-enter your PIN: the phone shows up as a card with live RAM, storage,
-CPU, and battery. Or from either side, run a command on the other:
+## Path B: Chromebook or phone elsewhere
+
+Step 1, on Linux. Same as Path A, but start with `--public`. The server
+prints a public link and a 4-digit code.
+
+```sh
+# first time only
+git clone https://github.com/jaykk99/linuxtomux.git
+cd linuxtomux
+# every time after that
+cd ~/linuxtomux && git pull
+./install-linux.sh
+monico-server start --public
+```
+
+Step 2, on the phone. Install the repo, then point at the public link.
+Use the link from the server screen, without `/dashboard` at the end.
+
+```sh
+pkg install python git
+git clone https://github.com/jaykk99/linuxtomux.git
+cd linuxtomux
+./install-termux.sh
+monico-connect --server https://<name>.trycloudflare.com
+```
+
+Type the 4-digit code when it asks. Done.
+
+The public link changes every time the server restarts. If the phone
+stops connecting later, start the server again and pair once more with
+the new link.
+
+## Check it worked
+
+Open the dashboard address the server printed and enter your PIN. The
+phone shows up as a card with live RAM, storage, CPU, and battery.
+Or run a command on the other side:
 
 ```sh
 monico-cmd phone 'uname -a'     # from Linux, runs on the phone
 monico-cmd linux 'uname -a'     # from the phone, runs on Linux
 ```
 
-## Not on the same WiFi
+## Three things that look alike
 
-The code flow finds the server by a broadcast on the local network,
-so both devices need to be on the same WiFi (or hotspot, or USB —
-see below). If the phone is somewhere else entirely, start the
-server with a public URL and point the phone at it directly; the
-code still works the same way:
+- **4-digit code.** Printed by the server. Good for 10 minutes, one
+  use. This is the only thing you ever type on the phone.
+- **Pairing key.** The real secret. Saved on the server at
+  `~/.monico-bridge/pairing-key`. You almost never type it.
+- **PIN.** Dashboard login only. Never in the repo, never printed.
 
-```sh
-# on Linux
-monico-server start --public
-# on the phone (public URL from the server's `Public dashboard:` line,
-# without the /dashboard at the end)
-monico-connect --server https://<name>.trycloudflare.com
-```
+If the phone asks you to set a token, you are running an old version.
+Update both sides (step 1 below).
 
-The public URL is new on every start, so use the fresh one each
-time you restart. On a Chromebook Linux container the LAN address
-usually is not reachable from the phone, so use `--public` there.
+## If it does not connect
 
-## Troubleshooting
+Work down this list in order. Do not skip ahead.
 
-**`monico-server --public` prints usage and exits.**
-You missed `start`. It is always `monico-server start --public`
-(`start` first, flags after).
+1. **Update both sides.** The old version has no 4-digit code and asks
+   for a token instead. On Linux: `cd ~/linuxtomux && git pull`, then
+   `./install-linux.sh`. On the phone: `cd ~/linuxtomux && git pull`,
+   then `./install-termux.sh`. A pull without the reinstall changes
+   nothing. If `git pull` complains about local changes, move the
+   checkout aside and clone fresh: `mv ~/linuxtomux ~/linuxtomux.old`.
+2. **Fresh code.** The code lasts 10 minutes and works once. On Linux
+   run `monico-pair` for a new one, then type it on the phone right
+   away. Never retry a code that already failed.
+3. **Chromebook? Use Path B.** The phone cannot find a server inside
+   a Chromebook Linux container over WiFi. Start with
+   `monico-server start --public` and use
+   `monico-connect --server <public link>`.
+4. **Same WiFi?** Path A needs the phone and the Linux box on the
+   same WiFi. If they are not, use Path B.
+5. **Still nothing?** Match the exact error:
+   - "No server found with that code." The phone cannot see the
+     server at all. Check steps 3 and 4.
+   - "bad or expired pair code." The code is spent or older than 10
+     minutes. `monico-pair` on Linux, then try again at once.
+   - "monico-pair says the server is not running." Start it first:
+     `monico-server start`.
+   - "monico-server: command not found." Open a new terminal so
+     `~/.local/bin` is on your PATH, or run
+     `~/.local/bin/monico-server start`.
+   - "monico-connect: command not found." Re-run `./install-termux.sh`
+     on the phone and watch for an error.
+   - "monico-server --public prints usage and exits." You missed
+     `start`. It is always `monico-server start --public`.
+   - "cloudflared is not installed." Run the one command the server
+     prints, then start again.
 
-**Server starts but shows no public URL and no code.**
-Stale install: versions before the dashboard update do not have
-`--public` at all and silently ignore the flag. Fix it with:
+## Phone has no internet at all?
 
-```sh
-cd ~/linuxtomux && git pull
-./install-linux.sh
-monico-server start --public
-```
-
-If `git pull` complains about local changes, move the checkout aside
-and clone fresh, then run the Step 1 block again:
-
-```sh
-mv ~/linuxtomux ~/linuxtomux.old
-```
-
-**`cloudflared is not installed.`**
-Run the one command the server prints, then start again:
-
-```sh
-sudo curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared && sudo chmod +x /usr/local/bin/cloudflared
-monico-server start --public
-```
-
-**`monico-connect` says "No server found with that code."**
-Same WiFi? Server running? Code right? The code is good for 10
-minutes and one use: run `monico-pair` on the Linux box for a fresh
-one, then `monico-connect` again. If the phone is not on the same
-network at all, use the `--server` route in "Not on the same WiFi"
-above instead of discovery.
-
-**`monico-connect` says "bad or expired pair code."**
-The code was already used, or the 10 minutes ran out. Run
-`monico-pair` on the Linux box for a fresh code.
-
-**`monico-pair` says the server is not running.**
-Start it first: `monico-server start`. `monico-pair` only mints
-codes for a server that is already up.
-
-**`monico-server: command not found`.**
-Open a new terminal so `~/.local/bin` is on your PATH, or run
-`~/.local/bin/monico-server start --public`.
-
-**`monico-connect: command not found` on the phone.**
-The install did not finish: run `./install-termux.sh` again from
-inside the `linuxtomux` checkout on the phone and watch for an
-error (a failed `git clone` means the phone has no internet; see
-"No internet on the phone?" below).
-
-**No internet on the phone?** The normal install needs internet
-once, for the `git clone` only. After that everything (the code
-exchange, the control channel, the dashboard) is plain HTTP on the
-local network, no internet needed on either side. If the phone has
-no internet at all, use the Linux box as the source instead: the
-server serves the installer and the app files itself
-(`/install-termux.sh` and `/linuxtomux.tar.gz`). From the phone,
-with the server's LAN address from its startup output:
+The normal install needs internet once, for `git clone` only. If the
+phone has no internet, get the installer from the Linux box instead.
+Use the server's LAN address from its startup output
+(192.168.1.23 here is an example):
 
 ```sh
 curl -fsSL http://192.168.1.23:8765/install-termux.sh -o install-termux.sh
@@ -145,9 +152,8 @@ MONICO_SERVER=http://192.168.1.23:8765 bash install-termux.sh
 monico-connect
 ```
 
-The installer fetches the app tarball from the Linux box, then
-`monico-connect` asks for the 4-digit code as usual. (The
-192.168.1.23 above is an example: use your server's LAN address.)
+The installer fetches the app from the Linux box, then `monico-connect`
+asks for the 4-digit code as usual.
 
 ---
 
@@ -175,45 +181,21 @@ The installer fetches the app tarball from the Linux box, then
   kernels, USB drives and 32-bit ARM all keep working with honest
   numbers rather than crashes.
 
-## The two commands
+## The commands
 
-**On the Linux box:**
-
-```sh
-monico-server start --public
-```
-
-It prints the pairing key once (saved at `~/.monico-bridge/pairing-key`,
-0600), prints a 4-digit code for the phone, and starts listening.
-The homescreen lives at the address the server prints. Leave off
-`--public` for same-WiFi only (see above). A fresh code any time,
-without restarting:
+Full steps are in "Pick your setup first" above. The extras:
 
 ```sh
-monico-pair
+monico-pair                    # fresh 4-digit code, no restart
+monico-connect 1234            # code as an argument, no prompt
+monico-connect --name pixel-8  # name this phone on the dashboard
+monico-model install           # optional on-device model
 ```
 
-**On the phone (Termux):** install the repo, then:
-
-```sh
-monico-connect
-```
-
-`monico-connect` is the phone's one command: it asks for the
-4-digit code from the Linux screen (or take it as an argument:
-`monico-connect 1234`), finds the server on the local network by
-itself, and connects. Run `./install-linux.sh` once on the Linux
-box to put `monico-server`, `monico-cmd`, `monico-model`, and
-`monico-pair` in `~/.local/bin`. Run `./install-termux.sh` once on
-the phone (from the repo checkout) for `monico-connect`,
-`monico-cmd`, and `monico-model` in `$PREFIX/bin`.
-
-**The model, both sides** (optional, uncensored, biggest the device
-can run):
-
-```sh
-monico-model install
-```
+`monico-server`, `monico-cmd`, `monico-model`, and `monico-pair`
+live in `~/.local/bin` on Linux (put there by `./install-linux.sh`).
+`monico-connect`, `monico-cmd`, and `monico-model` live in `$PREFIX/bin`
+on the phone (put there by `./install-termux.sh`).
 
 ## Why the phone connects out
 
@@ -408,12 +390,11 @@ often a device reports.
 
 ## Public URL (--public)
 
-See Quickstart: `monico-server start --public` launches a free
-Cloudflare quick tunnel (no account, no card) and prints a public
-`https://<name>.trycloudflare.com/dashboard` URL. The phone opens
-that URL from anywhere. If `cloudflared` is not installed, the
-server says so plainly and prints the one install command instead of
-failing silently (see Troubleshooting).
+`monico-server start --public` launches a free Cloudflare quick tunnel
+(no account, no card) and prints a public
+`https://<name>.trycloudflare.com/dashboard` URL. Steps are in Path B
+above. If `cloudflared` is not installed, the server says so plainly
+and prints the one install command instead of failing silently.
 
 A durable URL on your own Cloudflare account (named tunnel) is the
 follow-up, not built here: it needs `cloudflared tunnel login`, a
