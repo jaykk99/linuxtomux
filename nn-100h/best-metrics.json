@@ -1,28 +1,28 @@
 {
-  "exp_id": "exp-00001",
+  "exp_id": "exp-00063",
   "config": {
-    "hidden": 4,
-    "lr": 0.01,
+    "hidden": 8,
+    "lr": 0.3,
     "l2": 0.0,
-    "epochs": 300,
+    "epochs": 100,
     "seed": 0
   },
-  "test_acc": 0.8888888888888888,
+  "test_acc": 1.0,
   "auc": 1.0,
   "confusion": {
     "tp": 6,
-    "fp": 1,
-    "tn": 2,
+    "fp": 0,
+    "tn": 3,
     "fn": 0
   },
   "per_class_recall": {
     "fits": 1.0,
-    "no_fit": 0.6666666666666666
+    "no_fit": 1.0
   },
-  "train_acc": 0.8444444444444444,
+  "train_acc": 0.8666666666666667,
   "layers": [
     10,
-    4,
+    8,
     1
   ],
   "features": [
@@ -37,5 +37,5 @@
     "is_android",
     "cpu_cores"
   ],
-  "updated": "2026-11-14T22:40:31Z"
+  "updated": "2026-11-15T20:33:40Z"
 }
