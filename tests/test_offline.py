@@ -63,3 +63,30 @@ def test_client_registers_and_executes_over_literal_ip():
     finally:
         httpd.shutdown()
         server_mod.BRIDGE = prev
+
+
+def test_hosted_service_falls_back_when_port_busy():
+    """If the requested service port is taken, the client binds the
+    next free port instead of crashing. Regression: a local
+    llama-server sitting on 8899 killed monico-connect with
+    'Address already in use' and the whole connect flow died."""
+    import urllib.request
+
+    busy = _free_port()
+    holder = socket.socket()
+    holder.bind(("127.0.0.1", busy))
+    holder.listen(1)
+    try:
+        httpd = client_mod.start_hosted_service(busy, "fallback-test")
+        try:
+            actual = httpd.server_address[1]
+            assert actual != busy, f"bound the busy port {busy}"
+            assert busy < actual < busy + 20, actual
+            with urllib.request.urlopen(
+                    f"http://127.0.0.1:{actual}/", timeout=5) as resp:
+                assert resp.status == 200
+                assert b"fallback-test" in resp.read()
+        finally:
+            httpd.shutdown()
+    finally:
+        holder.close()

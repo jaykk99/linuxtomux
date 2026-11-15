@@ -42,6 +42,11 @@ SPECS_INTERVAL_S = float(os.environ.get("MONICO_SPECS_INTERVAL", "10"))
 # The phone as a server: its own tiny hosted service
 # ----------------------------------------------------------------------
 def start_hosted_service(port: int, name: str) -> ThreadingHTTPServer:
+    """Bind the phone's hosted service, falling back to the next free
+    port when the requested one is already taken (e.g. another local
+    service on 8899). Returns the server; the port actually bound is
+    server.server_address[1]. Raises the last OSError only if every
+    port in the fallback range is busy."""
     HOST_DIR.mkdir(parents=True, exist_ok=True)
 
     class S(BaseHTTPRequestHandler):
@@ -82,7 +87,15 @@ def start_hosted_service(port: int, name: str) -> ThreadingHTTPServer:
                 return self._send(404, b"not hosted here")
             return self._send(404, b"not found")
 
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), S)
+    last_exc = None
+    for candidate in range(port, port + 20):
+        try:
+            httpd = ThreadingHTTPServer(("127.0.0.1", candidate), S)
+            break
+        except OSError as exc:
+            last_exc = exc
+    else:
+        raise last_exc
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     return httpd
 
@@ -95,6 +108,9 @@ class Client:
         self.server = server_url.rstrip("/")
         self.key = key
         self.name = name
+        # Port the hosted service actually ends up on; run() updates
+        # this if start_hosted_service falls back to a free port.
+        self.service_port = CLIENT_SERVICE_PORT
         self.device_id = "dev-" + uuid.uuid4().hex[:8]
         saved = load_json(CLIENT_CONFIG)
         if saved.get("device_id"):
@@ -152,7 +168,7 @@ class Client:
         if job["type"] == "exec":
             return run_command(job["command"], job.get("timeout_s", 60))
         if job["type"] == "http":
-            url = f"http://127.0.0.1:{CLIENT_SERVICE_PORT}{job.get('path', '/')}"
+            url = f"http://127.0.0.1:{self.service_port}{job.get('path', '/')}"
             try:
                 with urllib.request.urlopen(url, timeout=15) as resp:
                     return {"status": resp.status,
@@ -164,8 +180,12 @@ class Client:
         return {"error": f"unknown job type {job.get('type')}"}
 
     def run(self) -> None:
-        start_hosted_service(CLIENT_SERVICE_PORT, self.name)
-        print(f"Monico bridge: hosted service on 127.0.0.1:{CLIENT_SERVICE_PORT}", flush=True)
+        httpd = start_hosted_service(CLIENT_SERVICE_PORT, self.name)
+        self.service_port = httpd.server_address[1]
+        note = "" if self.service_port == CLIENT_SERVICE_PORT else \
+            f" (port {CLIENT_SERVICE_PORT} was busy)"
+        print(f"Monico bridge: hosted service on 127.0.0.1:{self.service_port}{note}",
+              flush=True)
         threading.Thread(target=self._specs_loop, daemon=True).start()
         backoff = 2
         while True:
