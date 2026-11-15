@@ -393,3 +393,25 @@ def test_connect_saved_config_skips_prompt(tmp_path):
     finally:
         httpd.shutdown()
         server_mod.BRIDGE = prev
+
+
+def test_install_sh_routes_termux_and_launchers_run(tmp_path):
+    """./install.sh spots Termux and runs install-termux.sh. Launchers
+    point at a real bash (Termux has no /usr/bin/env), and commands
+    run through a shell that exists (Termux has no /bin/sh)."""
+    home = tmp_path / "phone-home"
+    prefix = tmp_path / "phone-usr"
+    repo = _copy_repo_checkout(tmp_path)
+    shutil.copy2(REPO / "install.sh", repo / "install.sh")
+    env = _sandbox_env(tmp_path, home, prefix)
+    env["TERMUX_VERSION"] = "0.118.0"
+    proc = subprocess.run(["sh", "./install.sh"], env=env,
+                          capture_output=True, text=True, timeout=60,
+                          cwd=str(repo))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    launcher = prefix / "bin" / "monico-cmd"
+    shebang = launcher.read_text().splitlines()[0]
+    assert shebang.startswith("#!/") and "env" not in shebang, shebang
+    assert os.access(shebang[2:], os.X_OK), shebang
+    from bridge.common import run_command
+    assert run_command("echo ok")["stdout"] == "ok\n"
