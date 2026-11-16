@@ -1,12 +1,12 @@
 {
   "repo": "jaykk99/linuxtomux",
-  "hours_trained": 11.128926,
-  "experiments_done": 54419,
+  "hours_trained": 16.628927,
+  "experiments_done": 74932,
   "best": {
     "exp_id": "exp-00063",
     "test_acc": 1.0,
     "auc": 1.0
   },
   "status": "training",
-  "updated": "2026-11-16T07:39:49Z"
+  "updated": "2026-11-16T13:10:07Z"
 }
