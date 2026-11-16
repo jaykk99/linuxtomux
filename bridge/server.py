@@ -771,6 +771,34 @@ class PeerLink:
                 backoff = min(backoff * 2, 30)
 
 
+class _CountingReader:
+    """Count bytes a handler reads from the request body.
+
+    Wrapped around ``rfile`` after the headers are parsed, so ``_send``
+    knows whether a request body was fully consumed before the response
+    is written and the connection closes.
+    """
+
+    def __init__(self, raw, owner):
+        self._raw = raw
+        self._owner = owner
+
+    def read(self, n=-1):
+        data = self._raw.read(n)
+        if data:
+            self._owner._body_seen += len(data)
+        return data
+
+    def readline(self, *args):
+        data = self._raw.readline(*args)
+        if data:
+            self._owner._body_seen += len(data)
+        return data
+
+    def __getattr__(self, name):
+        return getattr(self._raw, name)
+
+
 def make_handler():
     class H(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
@@ -778,9 +806,64 @@ def make_handler():
         def log_message(self, *a):  # quiet
             pass
 
+        def parse_request(self):
+            # Start counting at the first byte of the body: everything
+            # rfile reads from here on is request payload, and _send uses
+            # that count to decide whether it must drain before closing.
+            ok = super().parse_request()
+            self._body_seen = 0
+            if not isinstance(self.rfile, _CountingReader):
+                self.rfile = _CountingReader(self.rfile, self)
+            return ok
+
+        def _drain_body(self) -> None:
+            """Read any request body this handler did not consume itself.
+
+            The dashboard POSTs a small JSON body ({} on the engine
+            controls) and some endpoints ignore it. Closing a socket with
+            unread bytes in the receive buffer makes the kernel send RST,
+            which can discard the response the client is still reading:
+            that race is why /api/ai-engine/start intermittently raised
+            ConnectionResetError on the client. Draining first keeps the
+            shutdown orderly.
+            """
+            if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
+                # Length is unknown by design; do not keep the connection.
+                self.close_connection = True
+                return
+            try:
+                declared = int(self.headers.get("Content-Length") or 0)
+            except (TypeError, ValueError):
+                declared = 0
+            if declared <= getattr(self, "_body_seen", 0):
+                return
+            previous = None
+            try:
+                previous = self.connection.gettimeout()
+                # A client that promises more bytes than it sends must not
+                # pin this thread forever.
+                self.connection.settimeout(5)
+                while declared > getattr(self, "_body_seen", 0):
+                    want = min(declared - self._body_seen, 65536)
+                    chunk = self.rfile.read(want)
+                    if not chunk:
+                        break
+            except (OSError, ValueError):
+                self.close_connection = True
+            finally:
+                try:
+                    self.connection.settimeout(previous)
+                except OSError:
+                    pass
+
         # -- helpers ------------------------------------------------------
         def _send(self, code: int, body: bytes, ctype: str = "application/json",
                   extra: dict | None = None) -> None:
+            # Never answer on top of unread request bytes (see _drain_body).
+            try:
+                self._drain_body()
+            except AttributeError:
+                pass
             self.send_response(code)
             self.send_header("Content-Type", ctype)
             self.send_header("Content-Length", str(len(body)))
