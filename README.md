@@ -139,6 +139,29 @@ Work down this list in order. Do not skip ahead.
    - "cloudflared is not installed." Run the one command the server
      prints, then start again.
 
+## If it disconnects later
+
+Two things used to break a working setup, and both now heal themselves.
+
+**The server moved.** DHCP hands a laptop a new address, the phone holds
+the old one, and the phone used to sit in a "link down" loop forever.
+Now, when the saved address stops answering, the phone asks the network
+where its server is, proving the pairing key it already holds (no code
+to retype), and follows the answer to the new address. The server also
+announces itself on the LAN every 15 seconds, so a phone that cannot
+send broadcasts still finds it. The saved address is updated, so the
+next start needs no recovery at all.
+
+**The pairing changed.** Reinstalling the Linux side, or regenerating
+its key, makes the phone's saved key invalid. Instead of retrying a dead
+key in a loop, the phone says so plainly, asks for a fresh 4-digit code
+(`monico-pair` on the Linux box), trades it for a new key, and carries
+on connected. Run with no terminal to type into, it explains what to do
+and exits 1 rather than spinning.
+
+If it still will not connect, the old check still applies: on Linux
+`monico-pair`, then on the phone `monico-connect <code>`.
+
 ## Phone has no internet at all?
 
 The normal install needs internet once, for `git clone` only. If the

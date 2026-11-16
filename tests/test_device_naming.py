@@ -29,11 +29,12 @@ def test_pixel8_connect_uses_its_own_model_name(monkeypatch):
     seen = {}
 
     class StubClient:
-        def __init__(self, server_url, key, name):
-            seen.update(server_url=server_url, key=key, name=name)
+        def __init__(self, server_url, key, name, server_id=""):
+            seen.update(server_url=server_url, key=key, name=name,
+                        server_id=server_id)
 
         def run(self):
-            pass
+            return 0
 
     monkeypatch.setattr(clientmod, "Client", StubClient)
     clientmod.connect()
@@ -60,11 +61,11 @@ def test_connect_falls_back_to_termux_device_without_a_model(monkeypatch):
     seen = {}
 
     class StubClient:
-        def __init__(self, server_url, key, name):
+        def __init__(self, server_url, key, name, server_id=""):
             seen["name"] = name
 
         def run(self):
-            pass
+            return 0
 
     monkeypatch.setattr(clientmod, "Client", StubClient)
     clientmod.connect()

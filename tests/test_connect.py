@@ -393,3 +393,148 @@ def test_connect_saved_config_skips_prompt(tmp_path):
     finally:
         httpd.shutdown()
         server_mod.BRIDGE = prev
+
+
+# ----------------------------------------------------------------------
+# Reconnecting after the pairing changed or the server moved
+# ----------------------------------------------------------------------
+def test_pair_response_names_the_server_it_paired_with():
+    """The phone has to learn WHICH server it paired with: that id is
+    what lets it recognise the server's beacon/probe answer later. A
+    pairing that returns only a key cannot ever re-find a moved server."""
+    key, _ = get_or_create_key()
+    bridge = Bridge(name="linux-a", server_id="srv-aaaa")
+    httpd, prev = _serve(bridge)
+    try:
+        port = httpd.server_address[1]
+        code = server_mod._new_pair_code(key)
+        with urllib.request.urlopen(
+                f"http://127.0.0.1:{port}/pair?code={code}", timeout=10) as resp:
+            body = json.loads(resp.read())
+        assert body["key"] == key
+        assert body["server_id"] == "srv-aaaa", body
+        assert body["name"] == "linux-a", body
+    finally:
+        httpd.shutdown()
+        server_mod.BRIDGE = prev
+
+
+def test_discovery_answers_an_authenticated_who_probe():
+    """A paired phone can ask "where are you now?" without spending a
+    code. The packet proves the pairing key with an HMAC over its nonce,
+    so a wrong or missing key gets silence (no guessing oracle)."""
+    key, _ = get_or_create_key()
+    bridge = Bridge(name="linux-a", server_id="srv-aaaa")
+    prev = server_mod.BRIDGE
+    server_mod.BRIDGE = bridge
+    try:
+        nonce = "a" * 32
+        good = client_mod._probe_payload(key, nonce)
+        reply = server_mod._handle_discovery_packet(
+            good, ("127.0.0.1", 5000), 8765)
+        assert reply is not None
+        found = client_mod._parse_beacon(reply)
+        assert found and found["id"] == "srv-aaaa", found
+        assert found["server"].endswith(":8765"), found
+
+        bad = client_mod._probe_payload("not-the-key", nonce)
+        assert server_mod._handle_discovery_packet(
+            bad, ("127.0.0.1", 5000), 8765) is None
+        assert server_mod._handle_discovery_packet(
+            b'{"type":"monico-who","nonce":"n"}', ("127.0.0.1", 5000), 8765) is None
+        assert server_mod._handle_discovery_packet(
+            b"garbage", ("127.0.0.1", 5000), 8765) is None
+    finally:
+        server_mod.BRIDGE = prev
+
+
+def test_beacon_only_replaces_the_url_for_the_paired_server():
+    """A different bridge on the same LAN must never hijack the phone:
+    matching is by server id, and no saved id means no match."""
+    mine = {"server": "http://192.168.1.9:8765", "id": "srv-aaaa", "name": "a"}
+    theirs = {"server": "http://192.168.1.10:8765", "id": "srv-bbbb", "name": "b"}
+    assert client_mod._beacon_matches(mine, "srv-aaaa")
+    assert not client_mod._beacon_matches(theirs, "srv-aaaa")
+    assert not client_mod._beacon_matches(mine, "")
+    assert not client_mod._beacon_matches(None, "srv-aaaa")
+
+
+def test_parse_beacon_rejects_anything_but_a_here_packet():
+    ok = client_mod._parse_beacon(
+        b'{"type":"monico-here","server":"http://10.0.0.5:8765/","name":"x","id":"srv-x"}')
+    assert ok == {"server": "http://10.0.0.5:8765", "id": "srv-x", "name": "x"}
+    assert client_mod._parse_beacon(b'{"type":"monico-here","server":"ftp://x"}') is None
+    assert client_mod._parse_beacon(b'{"type":"monico-discover"}') is None
+    assert client_mod._parse_beacon(b"not json") is None
+
+
+def test_forget_stale_key_keeps_the_rest_of_the_pairing(tmp_path, monkeypatch):
+    """A rejected key is dropped so the next run pairs with a code, but
+    the name, device id and server id survive: those are this phone's
+    identity, not the credential."""
+    path = tmp_path / "client.json"
+    path.write_text(json.dumps({"server_url": "http://10.0.0.5:8765",
+                                "key": "dead", "server_id": "srv-x",
+                                "name": "phone", "device_id": "dev-1"}))
+    monkeypatch.setattr(client_mod, "CLIENT_CONFIG", path)
+    client_mod.forget_stale_key()
+    saved = json.loads(path.read_text())
+    assert "key" not in saved
+    assert saved["server_url"] == "http://10.0.0.5:8765"
+    assert saved["server_id"] == "srv-x"
+    assert saved["device_id"] == "dev-1"
+
+
+def test_register_keeps_the_server_id_across_reconnects(tmp_path, monkeypatch):
+    """register() rewrites client.json on every connect; if it drops the
+    server id there, the phone can no longer recognise the server after
+    an address change. Caught by a real reconnect during development."""
+    path = tmp_path / "client.json"
+    monkeypatch.setattr(client_mod, "CLIENT_CONFIG", path)
+    regs = []
+
+    class FakeClient(client_mod.Client):
+        def _req(self, method, p, payload=None, timeout=40):
+            regs.append(payload)
+            return {}
+
+    c = FakeClient("http://10.0.0.5:8765", "k", "phone", "srv-x")
+    c.register()
+    saved = json.loads(path.read_text())
+    assert saved["server_id"] == "srv-x", saved
+    assert saved["key"] == "k"
+    assert regs and regs[0]["device_id"] == c.device_id
+
+
+def test_client_repairs_a_rejected_key_with_a_code(monkeypatch, tmp_path):
+    """401 must not spin: the client asks for a fresh code, trades it for
+    a new key, and keeps going."""
+    path = tmp_path / "client.json"
+    path.write_text(json.dumps({"server_url": "http://10.0.0.5:8765",
+                                "key": "dead", "server_id": "srv-x"}))
+    monkeypatch.setattr(client_mod, "CLIENT_CONFIG", path)
+    monkeypatch.setattr(client_mod, "_prompt_pair_code", lambda: "1234")
+    monkeypatch.setattr(client_mod, "_exchange_code",
+                        lambda url, code: ("fresh-key", "srv-x"))
+    c = client_mod.Client("http://10.0.0.5:8765", "dead", "phone", "srv-x")
+    assert c._repair_pairing() is True
+    assert c.key == "fresh-key"
+    saved = json.loads(path.read_text())
+    assert saved["key"] == "fresh-key"
+
+
+def test_client_takes_the_address_a_probe_reports(monkeypatch, tmp_path):
+    """A dead saved URL is repaired from the probe answer, and the new
+    address is saved, so the next start needs no recovery at all."""
+    path = tmp_path / "client.json"
+    path.write_text(json.dumps({"server_url": "http://10.0.0.5:8765",
+                                "key": "k", "server_id": "srv-x"}))
+    monkeypatch.setattr(client_mod, "CLIENT_CONFIG", path)
+    monkeypatch.setattr(client_mod, "_probe_for_server",
+                        lambda key, seconds=None: {
+                            "server": "http://10.0.0.44:8765",
+                            "id": "srv-x", "name": "linux-a"})
+    c = client_mod.Client("http://10.0.0.5:8765", "k", "phone", "srv-x")
+    assert c._follow_server() is True
+    assert c.server == "http://10.0.0.44:8765"
+    assert json.loads(path.read_text())["server_url"] == "http://10.0.0.44:8765"

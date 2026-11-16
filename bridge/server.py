@@ -32,6 +32,7 @@ import hashlib
 import hmac
 import http.client
 import json
+import os
 import queue
 import secrets
 import select
@@ -1132,7 +1133,11 @@ def make_handler():
                 key = _redeem_pair_code((qs.get("code") or [""])[0])
                 if key is None:
                     return self._json(403, {"error": "bad or expired pair code"})
-                return self._json(200, {"key": key})
+                # The phone saves these so it can follow this server to a
+                # new address later (see the discovery beacon).
+                return self._json(200, {"key": key,
+                                        "server_id": BRIDGE.server_id,
+                                        "name": BRIDGE.name})
             if p == "/linuxtomux.tar.gz":
                 # Public: the tarball carries no secret. The phone
                 # downloads the exact code this server runs, no GitHub
@@ -1541,6 +1546,9 @@ def _repo_tarball_signature(root: Path) -> tuple:
 
 
 DISCOVERY_UDP_PORT = 18766  # phone broadcasts here to find a server
+# How often a running server announces itself on the LAN, so a
+# phone that paired before can follow it to a new address.
+BEACON_INTERVAL_S = float(os.environ.get("MONICO_BEACON_INTERVAL", "15"))
 
 
 def _discovery_reply_ip(sender: tuple[str, int]) -> str | None:
@@ -1558,6 +1566,50 @@ def _discovery_reply_ip(sender: tuple[str, int]) -> str | None:
         return None
 
 
+def _here_payload(ip: str, http_port: int) -> bytes:
+    """The "I am here" packet: this server's identity and URL, no secret.
+    Shared by the reply to a discovery probe and the periodic beacon, so a
+    phone always sees one shape."""
+    return json.dumps({
+        "type": "monico-here",
+        "server": f"http://{ip}:{http_port}",
+        "name": BRIDGE.name,
+        "id": BRIDGE.server_id,
+    }).encode()
+
+
+def _broadcast_targets() -> list[str]:
+    """Every address a phone on this network can hear.
+
+    The global broadcast (255.255.255.255) is not enough: Android and
+    several Linux distros drop it, and it never reaches a second subnet.
+    Add each interface's own subnet broadcast when the platform lets us
+    read it (Linux ioctl), otherwise keep the one address that always
+    exists."""
+    targets = ["255.255.255.255"]
+    try:
+        import fcntl
+        import struct
+
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            for _idx, name in socket.if_nameindex():
+                try:
+                    packed = fcntl.ioctl(
+                        s.fileno(), 0x8919,  # SIOCGIFBRDADDR
+                        struct.pack("256s", name[:15].encode()))
+                except OSError:
+                    continue
+                addr = socket.inet_ntoa(packed[20:24])
+                if addr and addr != "0.0.0.0" and addr not in targets:
+                    targets.append(addr)
+        finally:
+            s.close()
+    except Exception:
+        pass
+    return targets
+
+
 def _handle_discovery_packet(data: bytes, addr: tuple[str, int],
                              http_port: int) -> bytes | None:
     """One discovery packet in, one reply out (or None for silence).
@@ -1569,19 +1621,32 @@ def _handle_discovery_packet(data: bytes, addr: tuple[str, int],
         msg = json.loads(data.decode("utf-8", "replace"))
     except Exception:
         return None
-    if not isinstance(msg, dict) or msg.get("type") != "monico-discover":
+    if not isinstance(msg, dict):
+        return None
+    if msg.get("type") == "monico-who":
+        # A phone that already paired can ask where this server lives
+        # without a fresh code, which is what fixes a connection after
+        # DHCP moved the server. It proves the pairing key with an HMAC
+        # over its own nonce, so this is not a key-guessing oracle: no
+        # key, no reply.
+        nonce = str(msg.get("nonce") or "")
+        mac = str(msg.get("mac") or "")
+        if not nonce or not mac:
+            return None
+        key, _ = get_or_create_key()
+        want = hmac.new(key.encode(), nonce.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(want, mac):
+            return None
+        ip = _discovery_reply_ip(addr)
+        return _here_payload(ip, http_port) if ip else None
+    if msg.get("type") != "monico-discover":
         return None
     if not _check_pair_code(str(msg.get("code") or "")):
         return None
     ip = _discovery_reply_ip(addr)
     if not ip:
         return None
-    return json.dumps({
-        "type": "monico-here",
-        "server": f"http://{ip}:{http_port}",
-        "name": BRIDGE.name,
-        "id": BRIDGE.server_id,
-    }).encode()
+    return _here_payload(ip, http_port)
 
 
 def _start_discovery_listener(http_port: int,
@@ -1618,7 +1683,32 @@ def _start_discovery_listener(http_port: int,
             except OSError:
                 continue
 
+    def beacon() -> None:
+        """Announce this server on the LAN every BEACON_INTERVAL_S.
+
+        A phone that paired yesterday holds this server's old address; when
+        DHCP hands out a new one, the saved URL dies and the phone used to
+        sit in a "link down" loop with no way back. The beacon carries no
+        secret (identity + URL, same as the discovery reply), so a paired
+        phone can match it against the server id it saved and follow the
+        server to its new address."""
+        first = True
+        while True:
+            if not first:
+                time.sleep(BEACON_INTERVAL_S)
+            first = False
+            ip = _lan_ip()
+            if not ip:
+                continue
+            payload = _here_payload(ip, http_port)
+            for target in _broadcast_targets():
+                try:
+                    sock.sendto(payload, (target, udp_port))
+                except OSError:
+                    continue
+
     threading.Thread(target=loop, daemon=True).start()
+    threading.Thread(target=beacon, daemon=True).start()
     return sock
 
 

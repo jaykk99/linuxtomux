@@ -15,8 +15,11 @@ bridge, with the pairing key, so hosting on the phone stays owner-only.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
+import secrets
 import socket
 import sys
 import threading
@@ -26,6 +29,7 @@ import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from urllib.parse import urlparse
 
 from .common import (CLIENT_CONFIG, CLIENT_SERVICE_PORT, load_json,
                      log, model_status, run_command, save_json)
@@ -41,7 +45,8 @@ SPECS_INTERVAL_S = float(os.environ.get("MONICO_SPECS_INTERVAL", "10"))
 # ----------------------------------------------------------------------
 # The phone as a server: its own tiny hosted service
 # ----------------------------------------------------------------------
-def start_hosted_service(port: int, name: str) -> ThreadingHTTPServer:
+def start_hosted_service(port: int, name: str,
+                         avoid: set[int] | None = None) -> ThreadingHTTPServer:
     """Bind the phone's hosted service, falling back to the next free
     port when the requested one is already taken (e.g. another local
     service on 8899). Returns the server; the port actually bound is
@@ -88,7 +93,11 @@ def start_hosted_service(port: int, name: str) -> ThreadingHTTPServer:
             return self._send(404, b"not found")
 
     last_exc = None
+    skip = avoid or set()
     for candidate in range(port, port + 20):
+        if candidate in skip:
+            # The server we talk to is on this machine and owns that port.
+            continue
         try:
             httpd = ThreadingHTTPServer(("127.0.0.1", candidate), S)
             break
@@ -104,10 +113,14 @@ def start_hosted_service(port: int, name: str) -> ThreadingHTTPServer:
 # Bridge channel
 # ----------------------------------------------------------------------
 class Client:
-    def __init__(self, server_url: str, key: str, name: str):
+    def __init__(self, server_url: str, key: str, name: str,
+                 server_id: str = ""):
         self.server = server_url.rstrip("/")
         self.key = key
         self.name = name
+        # Which server this phone paired with, so a beacon from another
+        # bridge on the same LAN can never hijack the connection.
+        self.server_id = server_id
         # Port the hosted service actually ends up on; run() updates
         # this if start_hosted_service falls back to a free port.
         self.service_port = CLIENT_SERVICE_PORT
@@ -133,7 +146,11 @@ class Client:
             self.hw = detect()
         except Exception:
             pass
+        # Keep the server id: it is how this phone recognises the server's
+        # beacon after the server's address changes (and it must survive
+        # every reconnect, not just the first pairing).
         save_json(CLIENT_CONFIG, {"server_url": self.server, "key": self.key,
+                                  "server_id": self.server_id,
                                   "name": self.name, "device_id": self.device_id})
         info = {"device_id": self.device_id, "name": self.name,
                 "platform": self.hw["platform"], "kind": "device", "hw": self.hw,
@@ -164,6 +181,55 @@ class Client:
             except Exception:
                 pass
 
+    def _repair_pairing(self) -> bool:
+        """The server rejected our key. Trade a fresh 4-digit code for a
+        new one (the code is on the Linux screen: `monico-pair`), or give
+        up with an instruction a person can follow."""
+        print(stale_key_message(self.server), flush=True)
+        try:
+            code = _prompt_pair_code()
+        except SystemExit as exc:
+            print(str(exc), file=sys.stderr, flush=True)
+            forget_stale_key()
+            return False
+        try:
+            key, server_id = _exchange_code(self.server, code)
+        except SystemExit as exc:
+            print(str(exc), file=sys.stderr, flush=True)
+            forget_stale_key()
+            return False
+        self.key = key
+        if server_id:
+            self.server_id = server_id
+        saved = load_json(CLIENT_CONFIG) or {}
+        saved.update({"server_url": self.server, "key": self.key,
+                      "server_id": self.server_id, "name": self.name,
+                      "device_id": self.device_id})
+        save_json(CLIENT_CONFIG, saved)
+        print("Monico bridge: re-paired. Continuing.", flush=True)
+        return True
+
+    def _follow_server(self) -> bool:
+        """The saved address stopped answering. Ask the network where the
+        server is now (authenticated with our key), then fall back to
+        listening for its beacon; take the address it gives us and
+        reconnect, instead of looping on a stale IP."""
+        found = _probe_for_server(self.key)
+        if not _beacon_matches(found, self.server_id):
+            found = _listen_for_beacon(self.server_id)
+        if not _beacon_matches(found, self.server_id):
+            return False
+        url = found["server"]
+        if url == self.server:
+            return False
+        print(f"Monico bridge: server found at {url} (the address changed); reconnecting.",
+              flush=True)
+        self.server = url
+        saved = load_json(CLIENT_CONFIG) or {}
+        saved.update({"server_url": url, "server_id": self.server_id})
+        save_json(CLIENT_CONFIG, saved)
+        return True
+
     def _handle_job(self, job: dict) -> dict:
         if job["type"] == "exec":
             return run_command(job["command"], job.get("timeout_s", 60))
@@ -179,8 +245,22 @@ class Client:
                         "body": f"device service error: {exc}"}
         return {"error": f"unknown job type {job.get('type')}"}
 
-    def run(self) -> None:
-        httpd = start_hosted_service(CLIENT_SERVICE_PORT, self.name)
+    def _reserved_ports(self) -> set[int]:
+        """Ports the hosted service must not take: when the server is on
+        this same machine (Chromebook container, adb reverse), its port is
+        ours too, and binding it would answer our own requests."""
+        ports = set()
+        try:
+            u = urlparse(self.server)
+            if u.hostname in ("127.0.0.1", "localhost", "::1"):
+                ports.add(u.port or 80)
+        except Exception:
+            pass
+        return ports
+
+    def run(self) -> int:
+        httpd = start_hosted_service(CLIENT_SERVICE_PORT, self.name,
+                                     avoid=self._reserved_ports())
         self.service_port = httpd.server_address[1]
         note = "" if self.service_port == CLIENT_SERVICE_PORT else \
             f" (port {CLIENT_SERVICE_PORT} was busy)"
@@ -188,12 +268,14 @@ class Client:
               flush=True)
         threading.Thread(target=self._specs_loop, daemon=True).start()
         backoff = 2
+        failures = 0
         while True:
             try:
                 self.register()
                 print(f"Monico bridge: connected to {self.server} as {self.name} "
                       f"({self.device_id}). This device is now a server.", flush=True)
                 backoff = 2
+                failures = 0
                 while True:
                     resp = self._req("GET", f"/bridge/poll?device_id={self.device_id}",
                                      timeout=35)
@@ -205,9 +287,30 @@ class Client:
                               {"id": job["id"], "result": result}, timeout=20)
             except KeyboardInterrupt:
                 print("Monico bridge: disconnected by user.")
-                return
-            except Exception as exc:
+                return 0
+            except urllib.error.HTTPError as exc:
+                if exc.code in (401, 403):
+                    # The server does not honour this key any more (fresh
+                    # install, regenerated pairing key). Retrying with the
+                    # same key can only fail: repair the pairing, or stop
+                    # with instructions instead of spinning forever.
+                    if self._repair_pairing():
+                        backoff = 2
+                        continue
+                    return 1
                 print(f"Monico bridge: link down ({exc}); retrying in {backoff}s", flush=True)
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 30)
+            except Exception as exc:
+                # A dead address is not always a dead server: DHCP may have
+                # moved it. Listen for its beacon before backing off.
+                print(f"Monico bridge: link down ({exc}); retrying in {backoff}s", flush=True)
+                if self._follow_server():
+                    backoff = 2
+                    continue
+                if failures == 0:
+                    print(LINK_HINT, flush=True)
+                failures += 1
                 time.sleep(backoff)
                 backoff = min(backoff * 2, 30)
 
@@ -215,6 +318,8 @@ class Client:
 DISCOVERY_UDP_PORT = 18766  # same port the server listens on
 DISCOVERY_ROUNDS = 2        # broadcast rounds before giving up
 DISCOVERY_WAIT_S = 2.5      # seconds listening per round
+BEACON_WAIT_S = 6.0         # seconds to listen for a server's beacon
+PROBE_WAIT_S = 2.5          # seconds to wait for an answer to our probe
 
 
 def _prompt_pair_code() -> str:
@@ -301,14 +406,153 @@ def _discover_server(code: str) -> str | None:
     return None
 
 
-def _exchange_code(server_url: str, code: str) -> str:
+LINK_HINT = ("Monico bridge: still off the network. If the Linux box was "
+             "reinstalled or moved, run monico-pair there and start this "
+             "again with the new code: monico-connect <code>")
+
+
+def stale_key_message(server: str) -> str:
+    """What to tell someone whose saved key the server refuses."""
+    return (f"Monico bridge: {server} rejected this phone's pairing key "
+            "(it was regenerated, or the server was reinstalled). "
+            "Pair again with a fresh code.")
+
+
+def _parse_beacon(data: bytes) -> dict | None:
+    """One beacon (or discovery reply) in, a normalised record out.
+
+    Both packets carry the same shape: {"type": "monico-here", "server":
+    "http://ip:port", "name": ..., "id": ...}. Anything else is None."""
+    try:
+        msg = json.loads(data.decode("utf-8", "replace"))
+    except Exception:
+        return None
+    if not isinstance(msg, dict) or msg.get("type") != "monico-here":
+        return None
+    url = str(msg.get("server") or "").strip().rstrip("/")
+    if not url.startswith("http://") and not url.startswith("https://"):
+        return None
+    return {"server": url, "id": str(msg.get("id") or ""),
+            "name": str(msg.get("name") or "")}
+
+
+def _beacon_matches(found: dict | None, want_id: str) -> bool:
+    """Only the server this phone paired with may replace the saved URL.
+    No saved id means no matching: guessing is how a phone ends up on
+    somebody else's bridge."""
+    if not found or not want_id:
+        return False
+    return found.get("id") == want_id
+
+
+def _probe_payload(key: str, nonce: str) -> bytes:
+    """The "where are you now?" packet: a nonce and its HMAC under the
+    saved pairing key. The key never travels, and only the server that
+    knows it can answer."""
+    mac = hmac.new(key.encode(), nonce.encode(), hashlib.sha256).hexdigest()
+    return json.dumps({"type": "monico-who", "nonce": nonce, "mac": mac}).encode()
+
+
+def _probe_for_server(key: str, seconds: float | None = None) -> dict | None:
+    """Ask the local network where our server lives, authenticated with
+    the pairing key we already hold. Sent from an ephemeral port, so it
+    never fights the server's own listener for the discovery port, and
+    it works even where a broadcast beacon cannot be received."""
+    if not key:
+        return None
+    if seconds is None:
+        seconds = PROBE_WAIT_S
+    payload = _probe_payload(key, secrets.token_hex(16))
+    targets = [("255.255.255.255", DISCOVERY_UDP_PORT),
+               ("127.0.0.1", DISCOVERY_UDP_PORT)]
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.settimeout(seconds)
+        for target in targets:
+            try:
+                sock.sendto(payload, target)
+            except OSError:
+                continue
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            try:
+                data, _addr = sock.recvfrom(2048)
+            except (socket.timeout, OSError):
+                break
+            found = _parse_beacon(data)
+            if found:
+                return found
+    except OSError:
+        return None
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except Exception:
+                pass
+    return None
+
+
+def _listen_for_beacon(want_id: str, seconds: float | None = None) -> dict | None:
+    """Listen on the discovery port for a while for a server announcing
+    itself. Returns the first beacon from the server we paired with (or
+    the first one seen, which the caller then matches)."""
+    if seconds is None:
+        seconds = BEACON_WAIT_S
+    sock = None
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            sock.bind(("", DISCOVERY_UDP_PORT))
+        except OSError:
+            return None
+        sock.settimeout(seconds)
+        deadline = time.time() + seconds
+        while time.time() < deadline:
+            try:
+                data, _addr = sock.recvfrom(2048)
+            except socket.timeout:
+                break
+            except OSError:
+                break
+            found = _parse_beacon(data)
+            if found and _beacon_matches(found, want_id):
+                return found
+    except OSError:
+        return None
+    finally:
+        if sock is not None:
+            try:
+                sock.close()
+            except Exception:
+                pass
+    return None
+
+
+def forget_stale_key() -> None:
+    """Drop a key the server rejected, keep the rest of the pairing record
+    (name, device id, server, server id) so the next monico-connect pairs
+    with a fresh code instead of retrying a dead key."""
+    saved = load_json(CLIENT_CONFIG)
+    if not saved or "key" not in saved:
+        return
+    saved.pop("key", None)
+    save_json(CLIENT_CONFIG, saved)
+
+
+def _exchange_code(server_url: str, code: str) -> tuple[str, str]:
     """Trade the 4-digit code for the pairing key at the discovered
-    server. Loud failure, never silent: a bad code or a dead server
-    is an error message and exit 1, not an empty install."""
+    server. Returns (key, server_id); the id is what lets this phone
+    follow the server to a new address later. Loud failure, never
+    silent: a bad code or a dead server is an error message and exit 1,
+    not an empty install."""
     url = server_url.rstrip("/") + f"/pair?code={code}"
     try:
         with urllib.request.urlopen(url, timeout=10) as resp:
-            key = json.loads(resp.read() or b"{}").get("key") or ""
+            body = json.loads(resp.read() or b"{}")
     except urllib.error.HTTPError:
         raise SystemExit("ERROR: bad or expired pair code. Run monico-pair "
                          "on the Linux box for a fresh code (codes last "
@@ -317,31 +561,34 @@ def _exchange_code(server_url: str, code: str) -> str:
         raise SystemExit(f"ERROR: could not reach {server_url}. Is the "
                          "server still running, and is the phone on the "
                          "same WiFi?")
+    key = body.get("key") or ""
     if not key:
         raise SystemExit("ERROR: bad or expired pair code. Run monico-pair "
                          "on the Linux box for a fresh code.")
-    return key
+    return key, str(body.get("server_id") or "")
 
 
-def _pair_with_code(code: str) -> tuple[str, str]:
-    """Full code flow: find the server by broadcast, exchange the
-    code for the pairing key, save both (0600) for next time."""
+def _pair_with_code(code: str) -> tuple[str, str, str]:
+    """Full code flow: find the server by broadcast, exchange the code
+    for the pairing key, save both (0600) for next time."""
     server_url = _discover_server(code)
     if not server_url:
         raise SystemExit("ERROR: No server found with that code. Same WiFi? "
                          "Server running? Code right? (monico-pair on the "
                          "Linux box prints a fresh code.)")
-    key = _exchange_code(server_url, code)
-    save_json(CLIENT_CONFIG, {"server_url": server_url, "key": key})
+    key, server_id = _exchange_code(server_url, code)
+    save_json(CLIENT_CONFIG, {"server_url": server_url, "key": key,
+                              "server_id": server_id})
     print(f"Paired with {server_url}.", flush=True)
-    return server_url, key
+    return server_url, key, server_id
 
 
 def connect(server_url: str = "", key: str = "", name: str = "",
-            code: str = "") -> None:
+            code: str = "") -> int:
     saved = load_json(CLIENT_CONFIG)
     server_url = server_url or os.environ.get("MONICO_SERVER", "") or saved.get("server_url", "")
     key = key or os.environ.get("MONICO_TOKEN", "") or saved.get("key", "")
+    server_id = saved.get("server_id", "")
     name = name or saved.get("name", "") or os.environ.get("MONICO_NAME", "") \
         or (detect().get("device_model") or "termux-device")
     if not server_url or not key:
@@ -356,8 +603,9 @@ def connect(server_url: str = "", key: str = "", name: str = "",
             raise SystemExit("That is not a 4-digit code. Run monico-connect "
                              "again with the code from the Linux screen.")
         if server_url and not key:
-            key = _exchange_code(server_url, code)
-            save_json(CLIENT_CONFIG, {"server_url": server_url, "key": key})
+            key, server_id = _exchange_code(server_url, code)
+            save_json(CLIENT_CONFIG, {"server_url": server_url, "key": key,
+                                      "server_id": server_id, "name": name})
         else:
-            server_url, key = _pair_with_code(code)
-    Client(server_url, key, name).run()
+            server_url, key, server_id = _pair_with_code(code)
+    return Client(server_url, key, name, server_id).run()

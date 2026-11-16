@@ -288,5 +288,6 @@ def connect_main(argv: list[str]) -> int:
         else:
             opts["code"] = a  # bare 4-digit code from the Linux screen
             i += 1
-    connect(**opts)
-    return 0
+    # connect() reports 1 when the pairing is dead and could not be
+    # repaired, so a script (or the installer's smoke check) can tell.
+    return connect(**opts) or 0
