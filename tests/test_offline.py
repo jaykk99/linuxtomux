@@ -61,6 +61,10 @@ def test_client_registers_and_executes_over_literal_ip():
         assert res.get("exit_code") == 0, res
         assert "from-phone" in res.get("stdout", ""), res
     finally:
+        # Stop the client first: without this its retry loop outlives the
+        # server, prints "link down" during interpreter shutdown, and the
+        # suite's output looks like something failed when nothing did.
+        client.stop()
         httpd.shutdown()
         server_mod.BRIDGE = prev
 
@@ -90,3 +94,28 @@ def test_hosted_service_falls_back_when_port_busy():
             httpd.shutdown()
     finally:
         holder.close()
+
+
+def test_client_stop_ends_the_retry_loop():
+    """stop() is a real exit, not a suggestion.
+
+    Regression: run() looped on `while True` with no stop path, so a caller
+    that closed its server left a thread retrying (and printing) forever.
+    Asked to stop, run() must return promptly even mid-backoff, and a second
+    stop() must be harmless.
+    """
+    key, _is_new = get_or_create_key()
+    client = client_mod.Client(f"http://127.0.0.1:{_free_port()}", key,
+                               "stop-test")
+    done = {}
+    t = threading.Thread(target=lambda: done.setdefault("rc", client.run()),
+                         daemon=True)
+    t.start()
+    time.sleep(0.5)          # let it fail once and enter a backoff
+    started = time.time()
+    client.stop()
+    client.stop()            # twice is fine
+    t.join(10)
+    assert not t.is_alive(), "run() did not return after stop()"
+    assert time.time() - started < 3, "stop() waited out the backoff"
+    assert done["rc"] == 0, done

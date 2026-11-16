@@ -124,6 +124,13 @@ class Client:
         # Port the hosted service actually ends up on; run() updates
         # this if start_hosted_service falls back to a free port.
         self.service_port = CLIENT_SERVICE_PORT
+        # Set by stop(). The retry loop used to be an infinite `while True`
+        # with no way out short of killing the process, so a caller that
+        # closed the server (every test, and the phone app when it shuts
+        # down) left a thread printing "link down" forever. Nothing spins
+        # after stop(): the loop checks the flag and the backoff sleeps on
+        # it, so a stop is immediate instead of up to 30s late.
+        self._stop = threading.Event()
         self.device_id = "dev-" + uuid.uuid4().hex[:8]
         saved = load_json(CLIENT_CONFIG)
         if saved.get("device_id"):
@@ -165,8 +172,9 @@ class Client:
         so it never waits behind the long-poll. Failures are silent:
         the main loop owns reconnecting. If the server says it does
         not know this device (it restarted), register again."""
-        while True:
-            time.sleep(max(2.0, SPECS_INTERVAL_S))
+        while not self._stop.is_set():
+            if not self._pause(max(2.0, SPECS_INTERVAL_S)):
+                return
             try:
                 self._req("POST", "/bridge/specs",
                           {"device_id": self.device_id, "specs": live_specs()},
@@ -214,9 +222,12 @@ class Client:
         server is now (authenticated with our key), then fall back to
         listening for its beacon; take the address it gives us and
         reconnect, instead of looping on a stale IP."""
-        found = _probe_for_server(self.key)
+        if self._stop.is_set():
+            return False
+        stopped = self._stop.is_set
+        found = _probe_for_server(self.key, should_stop=stopped)
         if not _beacon_matches(found, self.server_id):
-            found = _listen_for_beacon(self.server_id)
+            found = _listen_for_beacon(self.server_id, should_stop=stopped)
         if not _beacon_matches(found, self.server_id):
             return False
         url = found["server"]
@@ -258,6 +269,14 @@ class Client:
             pass
         return ports
 
+    def stop(self) -> None:
+        """Ask run() to finish. Safe from any thread, and safe twice."""
+        self._stop.set()
+
+    def _pause(self, seconds: float) -> bool:
+        """Sleep unless stop() arrives first. True means "keep going"."""
+        return not self._stop.wait(seconds)
+
     def run(self) -> int:
         httpd = start_hosted_service(CLIENT_SERVICE_PORT, self.name,
                                      avoid=self._reserved_ports())
@@ -269,14 +288,14 @@ class Client:
         threading.Thread(target=self._specs_loop, daemon=True).start()
         backoff = 2
         failures = 0
-        while True:
+        while not self._stop.is_set():
             try:
                 self.register()
                 print(f"Monico bridge: connected to {self.server} as {self.name} "
                       f"({self.device_id}). This device is now a server.", flush=True)
                 backoff = 2
                 failures = 0
-                while True:
+                while not self._stop.is_set():
                     resp = self._req("GET", f"/bridge/poll?device_id={self.device_id}",
                                      timeout=35)
                     job = resp.get("job")
@@ -298,12 +317,17 @@ class Client:
                         backoff = 2
                         continue
                     return 1
+                if self._stop.is_set():
+                    return 0
                 print(f"Monico bridge: link down ({exc}); retrying in {backoff}s", flush=True)
-                time.sleep(backoff)
+                if not self._pause(backoff):
+                    return 0
                 backoff = min(backoff * 2, 30)
             except Exception as exc:
                 # A dead address is not always a dead server: DHCP may have
                 # moved it. Listen for its beacon before backing off.
+                if self._stop.is_set():
+                    return 0
                 print(f"Monico bridge: link down ({exc}); retrying in {backoff}s", flush=True)
                 if self._follow_server():
                     backoff = 2
@@ -311,7 +335,8 @@ class Client:
                 if failures == 0:
                     print(LINK_HINT, flush=True)
                 failures += 1
-                time.sleep(backoff)
+                if not self._pause(backoff):
+                    return 0
                 backoff = min(backoff * 2, 30)
 
 
@@ -453,7 +478,13 @@ def _probe_payload(key: str, nonce: str) -> bytes:
     return json.dumps({"type": "monico-who", "nonce": nonce, "mac": mac}).encode()
 
 
-def _probe_for_server(key: str, seconds: float | None = None) -> dict | None:
+DISCOVERY_SLICE_S = 0.2  # recv timeout while waiting: small enough that a
+                         # stop is noticed in a fraction of a second, large
+                         # enough not to spin
+
+
+def _probe_for_server(key: str, seconds: float | None = None,
+                      should_stop=None) -> dict | None:
     """Ask the local network where our server lives, authenticated with
     the pairing key we already hold. Sent from an ephemeral port, so it
     never fights the server's own listener for the discovery port, and
@@ -469,7 +500,7 @@ def _probe_for_server(key: str, seconds: float | None = None) -> dict | None:
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.settimeout(seconds)
+        sock.settimeout(DISCOVERY_SLICE_S)
         for target in targets:
             try:
                 sock.sendto(payload, target)
@@ -477,9 +508,13 @@ def _probe_for_server(key: str, seconds: float | None = None) -> dict | None:
                 continue
         deadline = time.time() + seconds
         while time.time() < deadline:
+            if should_stop is not None and should_stop():
+                return None
             try:
                 data, _addr = sock.recvfrom(2048)
-            except (socket.timeout, OSError):
+            except socket.timeout:
+                continue
+            except OSError:
                 break
             found = _parse_beacon(data)
             if found:
@@ -495,7 +530,8 @@ def _probe_for_server(key: str, seconds: float | None = None) -> dict | None:
     return None
 
 
-def _listen_for_beacon(want_id: str, seconds: float | None = None) -> dict | None:
+def _listen_for_beacon(want_id: str, seconds: float | None = None,
+                       should_stop=None) -> dict | None:
     """Listen on the discovery port for a while for a server announcing
     itself. Returns the first beacon from the server we paired with (or
     the first one seen, which the caller then matches)."""
@@ -509,13 +545,15 @@ def _listen_for_beacon(want_id: str, seconds: float | None = None) -> dict | Non
             sock.bind(("", DISCOVERY_UDP_PORT))
         except OSError:
             return None
-        sock.settimeout(seconds)
+        sock.settimeout(DISCOVERY_SLICE_S)
         deadline = time.time() + seconds
         while time.time() < deadline:
+            if should_stop is not None and should_stop():
+                return None
             try:
                 data, _addr = sock.recvfrom(2048)
             except socket.timeout:
-                break
+                continue
             except OSError:
                 break
             found = _parse_beacon(data)

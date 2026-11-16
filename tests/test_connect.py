@@ -531,7 +531,7 @@ def test_client_takes_the_address_a_probe_reports(monkeypatch, tmp_path):
                                 "key": "k", "server_id": "srv-x"}))
     monkeypatch.setattr(client_mod, "CLIENT_CONFIG", path)
     monkeypatch.setattr(client_mod, "_probe_for_server",
-                        lambda key, seconds=None: {
+                        lambda key, seconds=None, should_stop=None: {
                             "server": "http://10.0.0.44:8765",
                             "id": "srv-x", "name": "linux-a"})
     c = client_mod.Client("http://10.0.0.5:8765", "k", "phone", "srv-x")
