@@ -220,6 +220,36 @@ def test_discovery_handler_replies_only_for_valid_code():
         server_mod.BRIDGE = prev
 
 
+def test_udp_discovery_guess_budget_blocks_bruteforce_without_spending_pair_code(monkeypatch):
+    """A 4-digit code cannot be enumerated via unlimited UDP replies."""
+    key, _ = get_or_create_key()
+    code = server_mod._new_pair_code(key)
+    wrong = "9999" if code != "9999" else "8888"
+    ip = "192.0.2.44"
+    monkeypatch.setattr(server_mod, "_discovery_reply_ip",
+                        lambda addr: "127.0.0.1")
+    for _ in range(5):
+        assert server_mod._handle_discovery_packet(
+            client_mod._discovery_payload(wrong), (ip, 5412), 8765) is None
+
+    # Correct code from the blocked source gets no discovery response.
+    assert server_mod._handle_discovery_packet(
+        client_mod._discovery_payload(code), (ip, 5412), 8765) is None
+    # Another phone on the LAN can still pair with the correct code.
+    assert server_mod._handle_discovery_packet(
+        client_mod._discovery_payload(code), ("192.0.2.45", 5412), 8765) is not None
+    # Discovery must not spend the code or stop legitimate HTTP redemption.
+    assert server_mod._redeem_pair_code(code) == key
+
+
+def test_new_pair_code_resets_discovery_guess_budgets():
+    server_mod._new_pair_code("test-key")
+    for _ in range(5):
+        assert not server_mod._check_discovery_code("wrong", "192.0.2.60")
+    code = server_mod._new_pair_code("new-key")
+    assert server_mod._check_discovery_code(code, "192.0.2.60")
+
+
 def test_discovery_wire_format_round_trips():
     """Client and server agree on the packet shape: the client's
     payload parses as a monico-discover, and a monico-here reply
