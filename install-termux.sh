@@ -85,9 +85,10 @@ else
   rm -rf "$tmp"
 fi
 
+BASH_BIN="$(command -v bash)"
 for cmd in monico-connect monico-cmd monico-model; do
   cat > "$BIN_DIR/$cmd" <<EOF
-#!/usr/bin/env bash
+#!$BASH_BIN
 cd "$APP_DIR" && exec python3 "$APP_DIR/$cmd" "\$@"
 EOF
   chmod +x "$BIN_DIR/$cmd" "$APP_DIR/$cmd"
