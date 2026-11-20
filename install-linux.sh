@@ -6,8 +6,8 @@ set -eu
 SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$HOME/.monico-bridge/app"
 BIN_DIR="$HOME/.local/bin"
-if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
-  echo "ERROR: Python 3.10+ is required. Install it, then re-run install.sh." >&2
+if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 7))'; then
+  echo "ERROR: Python 3.7+ is required. Install it, then re-run install.sh." >&2
   exit 1
 fi
 mkdir -p "$APP_DIR" "$BIN_DIR" "$HOME/.monico-bridge"
