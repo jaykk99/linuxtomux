@@ -645,7 +645,8 @@ BRIDGE = Bridge()
 # Set at serve() start; the /pair route redeems it exactly once.
 # A threaded HTTP server and UDP discovery listener share the pairing state.
 PAIR_LOCK = threading.RLock()
-PAIR_STATE: dict = {"code": None, "key": None, "expires": 0.0, "attempts": 0}
+PAIR_STATE: dict = {"code": None, "key": None, "expires": 0.0,
+                    "attempts": 0, "udp_bad": {}}
 
 
 # ----------------------------------------------------------------------
@@ -1468,6 +1469,7 @@ def _new_pair_code(key: str) -> str:
             "key": key,
             "expires": time.time() + 600,
             "attempts": 0,
+            "udp_bad": {},  # reset discovery guess budgets with each code
         })
         return PAIR_STATE["code"]
 
@@ -1501,6 +1503,28 @@ def _redeem_pair_code(code: str) -> str | None:
         key = PAIR_STATE.get("key")
         PAIR_STATE["code"] = None
         return key
+
+
+
+def _check_discovery_code(code: str, sender_ip: str) -> bool:
+    """Limit code-guessing via the otherwise unauthenticated UDP oracle.
+
+    At most five incorrect guesses per source IP per issued code. Keep
+    the source table bounded, and do not count an already blocked guess.
+    This cannot prevent spoofed-source denial of service; filtering UDP
+    at the network boundary is still recommended.
+    """
+    with PAIR_LOCK:
+        counts = PAIR_STATE.setdefault("udp_bad", {})
+        if counts.get(sender_ip, 0) >= 5:
+            return False
+        if _check_pair_code(code):
+            return True
+        if sender_ip in counts:
+            counts[sender_ip] += 1
+        elif len(counts) < 256:
+            counts[sender_ip] = 1
+        return False
 
 
 def _pair_code_block(port: int, code: str) -> str:
@@ -1620,7 +1644,7 @@ def _handle_discovery_packet(data: bytes, addr: tuple[str, int],
     """One discovery packet in, one reply out (or None for silence).
     Pure packet logic, split out so tests can prove it without a
     working UDP socket: only a live code gets a reply, wrong codes,
-    wrong types, and garbage get silence (no guessing oracle), and
+    wrong types, and garbage get silence; incorrect codes are rate-limited, and
     discovery never spends the code (GET /pair does that)."""
     try:
         msg = json.loads(data.decode("utf-8", "replace"))
@@ -1646,7 +1670,7 @@ def _handle_discovery_packet(data: bytes, addr: tuple[str, int],
         return _here_payload(ip, http_port) if ip else None
     if msg.get("type") != "monico-discover":
         return None
-    if not _check_pair_code(str(msg.get("code") or "")):
+    if not _check_discovery_code(str(msg.get("code") or ""), addr[0]):
         return None
     ip = _discovery_reply_ip(addr)
     if not ip:
