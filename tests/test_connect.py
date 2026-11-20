@@ -53,6 +53,31 @@ def test_pair_code_is_four_digits_and_single_use():
     assert server_mod._check_pair_code(code) is False
 
 
+def test_pair_code_atomic_redemption_from_concurrent_connections():
+    """Two HTTP threads must never both receive the shared pairing key."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    key, _ = get_or_create_key()
+    code = server_mod._new_pair_code(key)
+    barrier = threading.Barrier(12)
+
+    def redeem(_):
+        barrier.wait(timeout=10)
+        return server_mod._redeem_pair_code(code)
+
+    with ThreadPoolExecutor(max_workers=12) as pool:
+        results = list(pool.map(redeem, range(12)))
+    assert results.count(key) == 1
+    assert results.count(None) == 11
+
+
+def test_pair_code_generation_uses_secure_randomness(monkeypatch):
+    monkeypatch.setattr(server_mod.secrets, "randbelow", lambda n: 7)
+    code = server_mod._new_pair_code("test-key")
+    assert code == "0007"
+    assert server_mod._redeem_pair_code("0007") == "test-key"
+
+
 def test_pair_code_wrong_guesses_lock_out():
     key, _ = get_or_create_key()
     code = server_mod._new_pair_code(key)

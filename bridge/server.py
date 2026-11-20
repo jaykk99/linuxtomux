@@ -643,6 +643,8 @@ class Bridge:
 BRIDGE = Bridge()
 # Short-lived phone pairing code: {"code", "key", "expires", "attempts"}.
 # Set at serve() start; the /pair route redeems it exactly once.
+# A threaded HTTP server and UDP discovery listener share the pairing state.
+PAIR_LOCK = threading.RLock()
 PAIR_STATE: dict = {"code": None, "key": None, "expires": 0.0, "attempts": 0}
 
 
@@ -1455,47 +1457,50 @@ def _lan_ip() -> str | None:
 
 
 def _new_pair_code(key: str) -> str:
-    """One short-lived pairing code for the phone: 4 digits, single
-    use, 10 minutes. The code is short enough to read off the Linux
-    screen and type on the phone; it only gates one exchange for the
-    pairing key, which stays the strong secret. Wrong guesses are
-    counted; after 5 the code dies and a fresh one is minted with
-    `monico-pair` (or a server restart)."""
-    import random
-    PAIR_STATE.update({
-        "code": f"{random.randint(0, 9999):04d}",
-        "key": key,
-        "expires": time.time() + 600,
-        "attempts": 0,
-    })
-    return PAIR_STATE["code"]
+    """Generate a cryptographically random, single-use four-digit code.
+
+    The code expires after ten minutes or five incorrect HTTP attempts.
+    Creating a fresh code atomically invalidates the previous code.
+    """
+    with PAIR_LOCK:
+        PAIR_STATE.update({
+            "code": f"{secrets.randbelow(10000):04d}",
+            "key": key,
+            "expires": time.time() + 600,
+            "attempts": 0,
+        })
+        return PAIR_STATE["code"]
 
 
 def _check_pair_code(code: str) -> bool:
-    """Is this code the live one, without consuming it? Discovery
-    uses this so a phone can find the server before redeeming; the
-    code is only spent by _redeem_pair_code."""
-    if not code or PAIR_STATE.get("code") is None:
-        return False
-    if time.time() > PAIR_STATE.get("expires", 0):
-        PAIR_STATE["code"] = None
-        return False
-    return code == PAIR_STATE["code"]
+    """Validate a discovery code without consuming it.
+
+    Read and expiry mutations are locked, so discovery cannot race a
+    concurrent mint/redeem request.
+    """
+    with PAIR_LOCK:
+        if not code or PAIR_STATE.get("code") is None:
+            return False
+        if time.time() > PAIR_STATE.get("expires", 0):
+            PAIR_STATE["code"] = None
+            return False
+        return hmac.compare_digest(code, PAIR_STATE["code"])
 
 
 def _redeem_pair_code(code: str) -> str | None:
-    """Return the pairing key for a valid code (consumed on success),
-    else None. A wrong code counts against the 5-guess budget."""
-    if not _check_pair_code(code):
-        if PAIR_STATE.get("code") is not None and code:
-            PAIR_STATE["attempts"] = PAIR_STATE.get("attempts", 0) + 1
-            if PAIR_STATE["attempts"] >= 5:
-                PAIR_STATE["code"] = None
-                print("Pair code locked out after 5 wrong guesses; "
-                      "run monico-pair for a fresh code.", flush=True)
-        return None
-    PAIR_STATE["code"] = None
-    return PAIR_STATE.get("key")
+    """Atomically redeem a pairing code once or count an invalid guess."""
+    with PAIR_LOCK:
+        if not _check_pair_code(code):
+            if PAIR_STATE.get("code") is not None and code:
+                PAIR_STATE["attempts"] = PAIR_STATE.get("attempts", 0) + 1
+                if PAIR_STATE["attempts"] >= 5:
+                    PAIR_STATE["code"] = None
+                    print("Pair code locked out after 5 wrong guesses; "
+                          "run monico-pair for a fresh code.", flush=True)
+            return None
+        key = PAIR_STATE.get("key")
+        PAIR_STATE["code"] = None
+        return key
 
 
 def _pair_code_block(port: int, code: str) -> str:
