@@ -640,3 +640,14 @@ a throwaway home and checks `/health`, `/settings`, `/api/ai-keys`,
 `/v1/models`, `/api/ai-engine` and the install tarball, so route wiring
 is covered as well as the internals. Run it locally with
 `python3 tests/smoke.py` (no model or network needed).
+
+## Unified installer (Termux and Linux)
+
+Run `sh install.sh` after cloning this repository. The wrapper detects
+Termux and delegates to `install-termux.sh`; otherwise it runs
+`install-linux.sh`. GitHub API-created files do not always retain
+executable permissions, so use `sh install.sh` rather than `./install.sh`.
+
+On a fresh Termux installation, install Python and Git first:
+`pkg install python git`. On standard Linux, Python 3 is needed.
+
