@@ -7,6 +7,7 @@
 set -e
 cd "$(dirname "$0")/.."
 
+sh -n install.sh && bash -n install-linux.sh && bash -n install-termux.sh
 python3 -m py_compile bridge/*.py tests/*.py monico-server monico-connect \
     monico-cmd monico-model
 echo "compile OK"
