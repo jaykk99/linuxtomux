@@ -11,6 +11,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
 import time
 from pathlib import Path
@@ -134,6 +135,17 @@ def blocked_reason(command: str) -> str | None:
     return None
 
 
+def _shell() -> str:
+    """Select an executable POSIX shell on Linux or Termux/Android."""
+    prefix = os.environ.get("PREFIX", "")
+    candidates = ([os.path.join(prefix, "bin", "sh")] if prefix else [])
+    candidates += ["/bin/sh", "/system/bin/sh"]
+    for shell in candidates:
+        if os.access(shell, os.X_OK):
+            return shell
+    return shutil.which("sh") or "/bin/sh"
+
+
 def run_command(command: str, timeout_s: int = 60) -> dict:
     """Run a shell command, capture bounded output. Used on both ends."""
     timeout_s = max(1, min(int(timeout_s or 60), 600))
@@ -145,7 +157,7 @@ def run_command(command: str, timeout_s: int = 60) -> dict:
     try:
         proc = subprocess.run(
             command, shell=True, capture_output=True, text=True,
-            timeout=timeout_s, executable="/bin/sh",
+            timeout=timeout_s, executable=_shell(),
         )
         out, err, code = proc.stdout, proc.stderr, proc.returncode
     except subprocess.TimeoutExpired as exc:
