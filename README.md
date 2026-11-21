@@ -137,8 +137,9 @@ server, never GitHub. Termux must already have `bash`, `curl` and
 `python3` installed; those base packages need a one-time installation
 if absent. Never pipe scripts from untrusted Linux servers.
 
-To share **Linux's internet** with Termux's proxy-aware apps, after
-successful pairing run:
+After successful local pairing, Termux automatically prepares Linux's
+authenticated HTTP(S) proxy for **proxy-aware Termux commands** in future
+shells. Reopen Termux to apply it, or explicitly enable it with:
 
 ```bash
 monico-net on
@@ -146,7 +147,7 @@ monico-net on
 
 Reopen Termux to apply the proxy to `curl`, `wget`, `pkg`
 and tools that honor `http_proxy` / `https_proxy`.
-Use `monico-net status` for status, `monico-net off` to disable
+Use `monico-net status` for status, `monico-net off` to persistently disable
 and reopen the shell, or `monico-net run curl https://example.com`
 for a single proxied command. The credentials never need to be pasted,
 and the proxy is only enabled in new shells while the Linux bridge is
