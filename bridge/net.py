@@ -18,6 +18,7 @@ import urllib.request
 from .common import CLIENT_CONFIG, DATA_DIR, load_json
 
 FLAG_FILE = DATA_DIR / "network-proxy-enabled"
+DISABLED_FILE = DATA_DIR / "network-proxy-disabled"
 BASH_HOOK = '# monico-net: Linux internet proxy (enabled only while reachable)'
 BASH_SOURCE = 'if command -v monico-net >/dev/null 2>&1; then eval "$(monico-net env 2>/dev/null)"; fi'
 
@@ -79,6 +80,27 @@ def _set_hook(path: Path) -> None:
             fd.write("\n" + BASH_HOOK + "\n" + BASH_SOURCE + "\n")
 
 
+def auto_enable_after_pair() -> bool:
+    """Prepare Linux internet access automatically for actual Termux.
+
+    Never runs on desktop Linux or when the user explicitly disabled it.
+    New shells only use the proxy while the paired Linux bridge is
+    reachable; outside the USB/LAN they use Android's normal routing.
+    """
+    from .hwdetect import is_termux
+    if not is_termux() or os.environ.get("MONICO_NET_AUTO", "1") == "0":
+        return False
+    if DISABLED_FILE.is_file() or not _vars():
+        return False
+    DATA_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if not FLAG_FILE.exists():
+        FLAG_FILE.write_text("enabled\n")
+        FLAG_FILE.chmod(0o600)
+    for path in (Path.home() / ".bashrc", Path.home() / ".profile"):
+        _set_hook(path)
+    return True
+
+
 def main(argv: list[str]) -> int:
     command = argv[0] if argv else "status"
     if command == "env":
@@ -99,6 +121,10 @@ def main(argv: list[str]) -> int:
         DATA_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
         FLAG_FILE.write_text("enabled\n")
         FLAG_FILE.chmod(0o600)
+        try:
+            DISABLED_FILE.unlink()
+        except FileNotFoundError:
+            pass
         home = Path.home()
         for path in (home / ".bashrc", home / ".profile"):
             _set_hook(path)
@@ -112,6 +138,9 @@ def main(argv: list[str]) -> int:
             FLAG_FILE.unlink()
         except FileNotFoundError:
             pass
+        DATA_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        DISABLED_FILE.write_text("disabled by user\n")
+        DISABLED_FILE.chmod(0o600)
         print("Linux proxy sharing disabled for NEW Termux shells. "
               "Close/reopen this shell to clear the old proxy variables.")
         return 0
