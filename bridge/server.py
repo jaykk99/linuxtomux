@@ -1549,7 +1549,7 @@ def _pair_code_block(port: int, code: str) -> str:
 
 
 TARBALL_FILES = ("monico-connect", "monico-cmd", "monico-model",
-                 "monico-usb", "install-termux.sh")
+                 "monico-usb", "monico-net", "install-termux.sh")
 _TARBALL_CACHE: dict = {"sig": None, "data": b""}
 _TARBALL_LOCK = threading.Lock()
 

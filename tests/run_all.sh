@@ -9,7 +9,7 @@ cd "$(dirname "$0")/.."
 
 sh -n install.sh && bash -n install-linux.sh && bash -n install-termux.sh
 python3 -m py_compile bridge/*.py tests/*.py monico-server monico-connect \
-    monico-cmd monico-model monico-usb
+    monico-cmd monico-model monico-usb monico-net
 echo "compile OK"
 
 # Six modules (connect, offline, pin, proxy, storage, tunnel) only carry

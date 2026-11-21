@@ -165,6 +165,15 @@ class Client:
                 "services": ["Device status page", "Hosted files (~/monico-host)",
                              "Remote commands"]}
         self._req("POST", "/bridge/register", info, timeout=20)
+        # Termux may be offline while the Linux host is online. Once the
+        # authenticated local connection exists, prepare its HTTP(S) proxy
+        # for future Termux shells without manual IP/password editing.
+        # A user who ran monico-net off is never silently re-enabled.
+        try:
+            from .net import auto_enable_after_pair
+            auto_enable_after_pair()
+        except (OSError, ValueError, RuntimeError):
+            pass  # proxy is optional; local pairing must always continue
         log(f"client registered as {self.device_id}")
 
     def _specs_loop(self) -> None:
@@ -670,10 +679,36 @@ def _prompt_server_url() -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
+USB_REVERSE_PORTS = (8767, 8765)
+
+
+def _local_usb_bridge_url() -> str | None:
+    """ADb reverse makes the Linux bridge reachable on Android loopback.
+
+    The UDP broadcast pairing packet cannot traverse ADB reverse. Probe
+    the known bridge TCP ports directly using only Python standard lib,
+    verify the service identity, and then redeem the SAME pairing code.
+    This needs no Android internet, LAN IP, or router broadcast support.
+    """
+    for port in USB_REVERSE_PORTS:
+        url = f"http://127.0.0.1:{port}"
+        try:
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(url + "/health", timeout=0.5) as resp:
+                info = json.loads(resp.read() or b"{}")
+            if info.get("ok") and info.get("service") == "monico-bridge":
+                return url
+        except (OSError, ValueError, urllib.error.URLError):
+            continue
+    return None
+
+
 def _pair_with_code(code: str) -> tuple[str, str, str]:
     """Discover or ask for the Linux URL, then redeem the same pairing
     code. Router UDP blocking must not strand an interactive phone."""
-    server_url = _discover_server(code)
+    # Prefer the USB loopback route when Linux already enabled ADB
+    # reverse. Otherwise use Wi-Fi UDP and finally the manual URL.
+    server_url = _local_usb_bridge_url() or _discover_server(code)
     if not server_url:
         server_url = _prompt_server_url()
     if not server_url:
