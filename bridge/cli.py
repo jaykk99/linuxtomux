@@ -15,7 +15,7 @@ import sys
 import urllib.error
 import urllib.request
 
-from .common import (CLIENT_CONFIG, DEFAULT_PORT, KEY_FILE,
+from .common import (CLIENT_CONFIG, DATA_DIR, DEFAULT_PORT, KEY_FILE,
                      get_or_create_key, load_json)
 from .hwdetect import PROFILES, detect
 from . import model_installer
@@ -28,6 +28,22 @@ def _post(url: str, key: str, payload: dict, timeout: int = 90) -> dict:
                                           "Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read() or b"{}")
+
+
+def _local_server_port() -> int:
+    """Resolve the Linux server port across separate terminal sessions.
+
+    An explicit MONICO_PORT wins. Otherwise use the last successfully
+    bound server port so monico-pair and monico-cmd still work after
+    monico-server start --port 8767 (e.g. alongside Agent Mail on 8765).
+    """
+    env = os.environ.get("MONICO_PORT", "").strip()
+    if env:
+        return int(env)
+    saved = load_json(DATA_DIR / "server-port.json").get("port")
+    if type(saved) is int and 1 <= saved <= 65535:
+        return saved
+    return DEFAULT_PORT
 
 
 def _bridge_endpoint() -> tuple[str, str]:
@@ -44,11 +60,11 @@ def _bridge_endpoint() -> tuple[str, str]:
     saved = load_json(CLIENT_CONFIG)
     if KEY_FILE.exists() and not saved.get("server_url"):
         key, _ = get_or_create_key()
-        return f"http://127.0.0.1:{DEFAULT_PORT}", key
+        return f"http://127.0.0.1:{_local_server_port()}", key
     if saved.get("server_url"):
         return saved["server_url"], saved.get("key", "")
     key, _ = get_or_create_key()
-    return f"http://127.0.0.1:{DEFAULT_PORT}", key
+    return f"http://127.0.0.1:{_local_server_port()}", key
 
 
 def resolve_from_list(devices: list[dict], name: str) -> str:
@@ -225,7 +241,7 @@ def server_main(argv: list[str]) -> int:
     if not argv or argv[0] == "start":
         def opt(flag: str) -> str | None:
             return argv[argv.index(flag) + 1] if flag in argv else None
-        port = int(opt("--port") or DEFAULT_PORT)
+        port = int(opt("--port") or _local_server_port())
         srv.serve(port, join_url=opt("--join"), join_key=opt("--key"),
                   name=opt("--name"), public=("--public" in argv))
         return 0
@@ -247,7 +263,7 @@ def pair_main(argv: list[str]) -> int:
     the pairing key; if the server is not running, say so plainly."""
     def opt(flag: str) -> str | None:
         return argv[argv.index(flag) + 1] if flag in argv else None
-    port = int(opt("--port") or DEFAULT_PORT)
+    port = int(opt("--port") or _local_server_port())
     key, _ = get_or_create_key()
     try:
         req = urllib.request.Request(
