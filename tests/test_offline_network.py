@@ -156,3 +156,35 @@ def test_offline_termux_install_fetches_linux_archive(monkeypatch, tmp_path):
         httpd.shutdown()
         httpd.server_close()
         server.BRIDGE = previous
+
+def test_auto_proxy_after_pair_respects_user_off_and_disconnected(monkeypatch, tmp_path):
+    httpd, previous = _server()
+    try:
+        url = f"http://127.0.0.1:{httpd.server_address[1]}"
+        config = tmp_path / "client.json"
+        config.write_text(json.dumps({"server_url": url, "key": "key-for-test"}))
+        monkeypatch.setattr(net, "CLIENT_CONFIG", config)
+        monkeypatch.setattr(net, "DATA_DIR", tmp_path)
+        monkeypatch.setattr(net, "FLAG_FILE", tmp_path / "enabled")
+        monkeypatch.setattr(net, "DISABLED_FILE", tmp_path / "disabled")
+        monkeypatch.setattr(net, "is_termux", lambda: True, raising=False)
+        # The helper imports hwdetect.is_termux, not net.is_termux.
+        import bridge.hwdetect as hw
+        monkeypatch.setattr(hw, "is_termux", lambda: True)
+        monkeypatch.setattr(net.Path, "home", lambda: tmp_path)
+        assert net.auto_enable_after_pair()
+        assert net.FLAG_FILE.is_file()
+        assert net.main(["off"]) == 0
+        assert not net.auto_enable_after_pair()
+        assert not net.FLAG_FILE.exists()
+        assert net.DISABLED_FILE.exists()
+        assert net.main(["on"]) == 0
+        assert not net.DISABLED_FILE.exists()
+        assert net.auto_enable_after_pair()
+        config.write_text(json.dumps({"server_url": "http://127.0.0.1:1",
+                                      "key": "key-for-test"}))
+        assert not net._vars()
+    finally:
+        httpd.shutdown()
+        httpd.server_close()
+        server.BRIDGE = previous
