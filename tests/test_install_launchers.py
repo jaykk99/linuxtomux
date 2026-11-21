@@ -28,7 +28,7 @@ class InstallerTest(unittest.TestCase):
                 universal_newlines=True, timeout=30)
             self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
             launch_dir = prefix / "bin" if is_termux else home / ".local" / "bin"
-            names = ("monico-connect", "monico-cmd", "monico-model")
+            names = ("monico-connect", "monico-cmd", "monico-model", "monico-usb")
             if not is_termux:
                 names += ("monico-server", "monico-pair")
             for name in names:
