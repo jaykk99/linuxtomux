@@ -165,6 +165,15 @@ class Client:
                 "services": ["Device status page", "Hosted files (~/monico-host)",
                              "Remote commands"]}
         self._req("POST", "/bridge/register", info, timeout=20)
+        # Termux may be offline while the Linux host is online. Once the
+        # authenticated local connection exists, prepare its HTTP(S) proxy
+        # for future Termux shells without manual IP/password editing.
+        # A user who ran monico-net off is never silently re-enabled.
+        try:
+            from .net import auto_enable_after_pair
+            auto_enable_after_pair()
+        except (OSError, ValueError, RuntimeError):
+            pass  # proxy is optional; local pairing must always continue
         log(f"client registered as {self.device_id}")
 
     def _specs_loop(self) -> None:
