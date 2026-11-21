@@ -302,7 +302,7 @@ def test_manual_server_prompt_accepts_linux_dashboard_url(monkeypatch):
 
     def fake_open(path, *args, **kwargs):
         if str(path) == "/dev/tty":
-            return io.StringIO("http://192.168.42.7:8767/dashboard\\n")
+            return io.StringIO("http://192.168.42.7:8767/dashboard\n")
         return real_open(path, *args, **kwargs)
 
     monkeypatch.setattr("builtins.open", fake_open)
