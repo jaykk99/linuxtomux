@@ -1,0 +1,5 @@
+#!/usr/bin/env python3
+import sys
+from bridge.cli import usb_main
+if __name__ == "__main__":
+    sys.exit(usb_main(sys.argv[1:]))
