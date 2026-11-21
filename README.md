@@ -106,6 +106,29 @@ The public link changes every time the server restarts. If the phone
 stops connecting later, start the server again and pair once more with
 the new link.
 
+## USB storage connected to Linux, visible from Termux
+
+Once the phone is paired, run `monico-usb` **on Linux or on Termux**.
+It reads the authenticated Linux hardware inventory and prints the
+mounted USB volume path and free space (or reports an unmounted drive).
+A freshly plugged-in drive appears within about 30 seconds. You can
+also see Linux USB space on the bridge dashboard on either device.
+
+This reports **Linux's USB**, not a USB drive mounted by Android. It
+does **not** magically mount drives or grant the phone direct file
+access; to list files with the owner's existing command bridge, use
+`monico-cmd linux 'ls /path/to/mounted/usb'`. Agent Mail separately
+chooses USB for its private storage when Unix permissions are supported.
+Never format or mount an unknown drive automatically.
+
+If entering the pairing code says "No server found", use the precise
+`Termux direct pairing fallback: monico-connect --server http://IP:PORT`
+printed by `monico-server` on Linux. Enter the fresh four-digit code
+when prompted. This avoids UDP broadcasting; the phone still needs a
+routable LAN path to Linux. Chromebook containers may need an authorized
+ADB reverse connection or an explicitly enabled tunnel. No files need
+to be edited.
+
 ## Check it worked
 
 Open the dashboard address the server printed and enter your PIN. The
