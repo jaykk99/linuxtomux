@@ -106,6 +106,59 @@ The public link changes every time the server restarts. If the phone
 stops connecting later, start the server again and pair once more with
 the new link.
 
+## No-internet Android + internet from Linux
+
+Lin-2-Mux needs **a local link**, not internet on the phone.
+For regular Linux, connect the phone to the same WiFi (the Linux laptop
+can provide a hotspot without mobile data). If using a Chromebook Linux
+container, WiFi discovery may fail: **USB debugging with authorized ADB
+reverse** is the most reliable fully offline connection.
+
+With ADB authorized, on Linux run:
+
+```bash
+adb reverse tcp:8767 tcp:8767
+monico-pair
+```
+
+Then on Termux run `monico-connect` and enter the printed 4-digit code.
+It now checks the ADB localhost route **before UDP discovery**, which
+works even with Android mobile data off. It still needs
+USB cable connectivity and Termux's existing Python installation.
+For a phone without internet and without the app installed yet, install
+it from Linux itself over the USB loopback:
+
+```bash
+curl -fsSL http://127.0.0.1:8767/install-termux.sh | bash -s -- http://127.0.0.1:8767
+```
+
+This fetches the installer plus app archive from the running Linux
+server, never GitHub. Termux must already have `bash`, `curl` and
+`python3` installed; those base packages need a one-time installation
+if absent. Never pipe scripts from untrusted Linux servers.
+
+To share **Linux's internet** with Termux's proxy-aware apps, after
+successful pairing run:
+
+```bash
+monico-net on
+```
+
+Reopen Termux to apply the proxy to `curl`, `wget`, `pkg`
+and tools that honor `http_proxy` / `https_proxy`.
+Use `monico-net status` for status, `monico-net off` to disable
+and reopen the shell, or `monico-net run curl https://example.com`
+for a single proxied command. The credentials never need to be pasted,
+and the proxy is only enabled in new shells while the Linux bridge is
+reachable. Local bridge actions work without either device having
+internet; new downloads require Linux to have internet.
+
+This is **not** Android-wide internet or cellular data: non-Termux
+Android apps do not automatically use this proxy. System-wide Android
+reverse tethering requires a VPN app/root/OS integration. USB debugging
+requires the user to authorize the Linux machine once. With neither
+WiFi nor USB connection, no communication is possible.
+
 ## USB storage connected to Linux, visible from Termux
 
 Once the phone is paired, run `monico-usb` **on Linux or on Termux**.
