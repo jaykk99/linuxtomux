@@ -60,7 +60,9 @@ BIN_DIR="${PREFIX:-$HOME/../usr}/bin"
 mkdir -p "$APP_DIR" "$BIN_DIR" "$HOME/.monico-bridge" "$HOME/monico-host"
 
 SRC_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo "")"
-if [ -f "$SRC_DIR/monico-connect" ]; then
+# A Linux-server URL means use the running Linux version, not an old
+# checkout in the current directory (especially when curl | bash is piped).
+if [ -f "$SRC_DIR/monico-connect" ] && [ -z "${MONICO_SERVER:-}" ]; then
   cp -r "$SRC_DIR/bridge" "$SRC_DIR/ui" "$APP_DIR/"
   cp "$SRC_DIR"/monico-connect "$SRC_DIR"/monico-cmd "$SRC_DIR"/monico-model "$SRC_DIR"/monico-usb "$SRC_DIR"/monico-net "$APP_DIR/"
 elif [ -n "${MONICO_SERVER:-}" ]; then
