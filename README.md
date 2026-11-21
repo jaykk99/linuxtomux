@@ -148,8 +148,27 @@ Work down this list in order. Do not skip ahead.
 4. **Same WiFi?** Path A needs the phone and the Linux box on the
    same WiFi. If they are not, use Path B.
 5. **Still nothing?** Match the exact error:
-   - "No server found with that code." The phone cannot see the
-     server at all. Check steps 3 and 4.
+   - "No server found with that code." The phone's UDP broadcast
+     could not find the server. On a normal Linux computer, take the
+     **LAN dashboard** URL printed when the Linux server starts,
+     remove `/dashboard`, and enter that URL when Termux prompts.
+     If Termux was installed before the fallback was added, update it
+     with `cd ~/linuxtomux && git pull && ./install-termux.sh` first.
+     Or connect directly without broadcast (use your actual IP and port):
+
+     ```sh
+     # On Linux (new code, while the server is running):
+     monico-pair
+     # On Termux, replace the address and 4 digits with your own:
+     monico-connect --server http://192.168.1.23:8767 1234
+     ```
+
+     **8767** is the cohosting port when Agent Mail uses 8765.
+     A regular standalone Lin-2-Mux server may use **8765** instead.
+     If Linux runs inside a Chromebook container, or the phone uses
+     mobile data/a different network, the Linux LAN IP may not be
+     accessible: use the `--public` path above and supply its URL.
+     The code is one-use/10 minutes; generate a fresh one for each retry.
    - "bad or expired pair code." The code is spent or older than 10
      minutes. `monico-pair` on Linux, then try again at once.
    - "monico-pair says the server is not running." Start it first:

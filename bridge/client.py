@@ -388,16 +388,44 @@ def _parse_discovery_reply(data: bytes) -> str | None:
     return str(msg.get("server") or "") or None
 
 
+def _discovery_targets() -> list[tuple[str, int]]:
+    """Try global, loopback and each interface's directed broadcast.
+
+    Some Android WiFi networks drop 255.255.255.255 but deliver the
+    actual subnet broadcast (e.g. 192.168.1.255). SIOCGIFBRDADDR is
+    optional: Termux versions that cannot read interfaces still have
+    the original destinations and the explicit --server fallback.
+    """
+    hosts = ["255.255.255.255", "127.0.0.1"]
+    try:
+        import fcntl
+        import struct
+        for _idx, ifname in socket.if_nameindex():
+            if ifname == "lo":
+                continue
+            try:
+                probe = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                try:
+                    request = struct.pack("256s", ifname[:15].encode())
+                    response = fcntl.ioctl(probe.fileno(), 0x8919, request)
+                finally:
+                    probe.close()
+                host = socket.inet_ntoa(response[20:24])
+                if host not in hosts and host != "0.0.0.0":
+                    hosts.append(host)
+            except (OSError, ValueError):
+                continue
+    except (ImportError, AttributeError, OSError):
+        pass
+    return [(host, DISCOVERY_UDP_PORT) for host in hosts]
+
+
 def _discover_server(code: str) -> str | None:
-    """Find a server on the local network that knows this code. A UDP
-    broadcast to every interface plus a loopback unicast (adb-reverse
-    setups reach the server at 127.0.0.1); the first server that
-    answers wins. A wrong code gets silence, so no reply means the
-    code is wrong/expired, the server is not running, or the phone
-    is not on the same network. Returns the server URL or None."""
+    """Find a server on the local network, including Android LANs
+    where global broadcasts are filtered. An explicit --server URL
+    bypasses UDP discovery entirely."""
     payload = _discovery_payload(code)
-    targets = [("255.255.255.255", DISCOVERY_UDP_PORT),
-               ("127.0.0.1", DISCOVERY_UDP_PORT)]
+    targets = _discovery_targets()
     for _round in range(DISCOVERY_ROUNDS):
         sock = None
         try:
@@ -494,8 +522,7 @@ def _probe_for_server(key: str, seconds: float | None = None,
     if seconds is None:
         seconds = PROBE_WAIT_S
     payload = _probe_payload(key, secrets.token_hex(16))
-    targets = [("255.255.255.255", DISCOVERY_UDP_PORT),
-               ("127.0.0.1", DISCOVERY_UDP_PORT)]
+    targets = _discovery_targets()
     sock = None
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -606,14 +633,56 @@ def _exchange_code(server_url: str, code: str) -> tuple[str, str]:
     return key, str(body.get("server_id") or "")
 
 
+def _prompt_server_url() -> str:
+    """Allow a real Termux user to recover when router/Android blocks UDP.
+
+    Accept the LAN dashboard URL as printed on Linux, or a hostname/IP
+    with an explicit port. Never prompt a non-interactive script, so CI
+    and cron fail loudly rather than waiting for input forever.
+    """
+    try:
+        tty = open("/dev/tty", "r")
+    except OSError:
+        return ""
+    try:
+        print("Monico bridge: LAN auto-discovery failed. Enter the Linux "
+              "dashboard address (without /dashboard), or press Enter "
+              "to exit. Example: http://192.168.1.23:8767",
+              file=sys.stderr, flush=True)
+        raw = tty.readline().strip()
+    finally:
+        tty.close()
+    if not raw:
+        return ""
+    if not raw.startswith(("http://", "https://")):
+        raw = "http://" + raw
+    parsed = urlparse(raw)
+    try:
+        valid_port = parsed.port is not None
+    except ValueError:
+        valid_port = False
+    if (parsed.scheme not in ("http", "https") or not parsed.hostname
+            or not valid_port or parsed.username or parsed.password
+            or parsed.path not in ("", "/", "/dashboard")
+            or parsed.query or parsed.fragment):
+        raise SystemExit("ERROR: enter an http://IP:PORT address from "
+                         "the Linux dashboard, without /dashboard.")
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
 def _pair_with_code(code: str) -> tuple[str, str, str]:
-    """Full code flow: find the server by broadcast, exchange the code
-    for the pairing key, save both (0600) for next time."""
+    """Discover or ask for the Linux URL, then redeem the same pairing
+    code. Router UDP blocking must not strand an interactive phone."""
     server_url = _discover_server(code)
     if not server_url:
-        raise SystemExit("ERROR: No server found with that code. Same WiFi? "
-                         "Server running? Code right? (monico-pair on the "
-                         "Linux box prints a fresh code.)")
+        server_url = _prompt_server_url()
+    if not server_url:
+        raise SystemExit("ERROR: No server found with that code. UDP "
+                         "discovery may be blocked. On Termux try "
+                         "monico-connect --server http://LINUX-IP:8767 "
+                         "using a fresh code from monico-pair on Linux. "
+                         "If Linux is in a Chromebook container or the "
+                         "networks differ, use the --public tunnel URL.")
     key, server_id = _exchange_code(server_url, code)
     save_json(CLIENT_CONFIG, {"server_url": server_url, "key": key,
                               "server_id": server_id})

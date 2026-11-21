@@ -268,6 +268,73 @@ def test_discovery_wire_format_round_trips():
     assert client_mod._parse_discovery_reply(b"garbage") is None
 
 
+def test_discovery_targets_include_interface_broadcast(monkeypatch):
+    """An Android wlan0 broadcast supplements the global broadcast."""
+    import fcntl
+    import socket
+
+    class FakeSocket:
+        def fileno(self):
+            return 42
+
+        def close(self):
+            pass
+
+    def fake_ioctl(fd, command, packed):
+        assert (fd, command) == (42, 0x8919)
+        return packed[:20] + socket.inet_aton("192.168.42.255") + packed[24:]
+
+    monkeypatch.setattr(client_mod.socket, "if_nameindex",
+                        lambda: [(1, "wlan0")])
+    monkeypatch.setattr(client_mod.socket, "socket",
+                        lambda *args: FakeSocket())
+    monkeypatch.setattr(fcntl, "ioctl", fake_ioctl)
+    targets = client_mod._discovery_targets()
+    assert ("255.255.255.255", client_mod.DISCOVERY_UDP_PORT) in targets
+    assert ("127.0.0.1", client_mod.DISCOVERY_UDP_PORT) in targets
+    assert ("192.168.42.255", client_mod.DISCOVERY_UDP_PORT) in targets
+    assert len(targets) == len(set(targets))
+
+
+def test_manual_server_prompt_accepts_linux_dashboard_url(monkeypatch):
+    """The URL Linux actually prints can be pasted into Termux as-is."""
+    real_open = open
+
+    def fake_open(path, *args, **kwargs):
+        if str(path) == "/dev/tty":
+            return io.StringIO("http://192.168.42.7:8767/dashboard\n")
+        return real_open(path, *args, **kwargs)
+
+    monkeypatch.setattr("builtins.open", fake_open)
+    assert client_mod._prompt_server_url() == "http://192.168.42.7:8767"
+
+
+def test_manual_pairing_fallback_redeems_same_code(tmp_path, monkeypatch):
+    """Blocked UDP still pairs successfully over an explicit HTTP URL."""
+    key, _ = get_or_create_key()
+    bridge = Bridge(name="linux-a", server_id="srv-manual")
+    httpd, prev = _serve(bridge)
+    try:
+        port = httpd.server_address[1]
+        cfg = tmp_path / "termux-client.json"
+        monkeypatch.setattr(client_mod, "CLIENT_CONFIG", cfg)
+        monkeypatch.setattr(client_mod, "_discover_server",
+                            lambda code: None)
+        monkeypatch.setattr(client_mod, "_prompt_server_url",
+                            lambda: f"http://127.0.0.1:{port}")
+        code = server_mod._new_pair_code(key)
+        url, paired_key, ident = client_mod._pair_with_code(code)
+        assert url == f"http://127.0.0.1:{port}"
+        assert paired_key == key
+        assert ident == "srv-manual"
+        stored = json.loads(cfg.read_text())
+        assert stored["server_url"] == url
+        assert stored["key"] == key
+    finally:
+        httpd.shutdown()
+        server_mod.BRIDGE = prev
+
+
 def test_prompt_pair_code_reads_stdin_and_rejects_short(monkeypatch):
     real_open = open
 
