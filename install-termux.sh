@@ -62,7 +62,7 @@ mkdir -p "$APP_DIR" "$BIN_DIR" "$HOME/.monico-bridge" "$HOME/monico-host"
 SRC_DIR="$(cd "$(dirname "$0")" 2>/dev/null && pwd || echo "")"
 if [ -f "$SRC_DIR/monico-connect" ]; then
   cp -r "$SRC_DIR/bridge" "$SRC_DIR/ui" "$APP_DIR/"
-  cp "$SRC_DIR"/monico-connect "$SRC_DIR"/monico-cmd "$SRC_DIR"/monico-model "$APP_DIR/"
+  cp "$SRC_DIR"/monico-connect "$SRC_DIR"/monico-cmd "$SRC_DIR"/monico-model "$SRC_DIR"/monico-usb "$APP_DIR/"
 elif [ -n "${MONICO_SERVER:-}" ]; then
   # Same WiFi, no internet needed: the Linux box serves a tarball of
   # the exact code it runs at /linuxtomux.tar.gz.
@@ -74,19 +74,19 @@ elif [ -n "${MONICO_SERVER:-}" ]; then
     exit 1
   }
   cp -r "$tmp/bridge" "$tmp/ui" "$APP_DIR/"
-  cp "$tmp"/monico-connect "$tmp"/monico-cmd "$tmp"/monico-model "$APP_DIR/"
+  cp "$tmp"/monico-connect "$tmp"/monico-cmd "$tmp"/monico-model "$tmp"/monico-usb "$APP_DIR/"
   rm -rf "$tmp"
 else
   REPO="${MONICO_REPO:-https://github.com/jaykk99/linuxtomux}"
   tmp="$(mktemp -d)"
   git clone --depth 1 "$REPO" "$tmp/repo"
   cp -r "$tmp/repo/bridge" "$tmp/repo/ui" "$APP_DIR/"
-  cp "$tmp/repo"/monico-connect "$tmp/repo"/monico-cmd "$tmp/repo"/monico-model "$APP_DIR/"
+  cp "$tmp/repo"/monico-connect "$tmp/repo"/monico-cmd "$tmp/repo"/monico-model "$tmp/repo"/monico-usb "$APP_DIR/"
   rm -rf "$tmp"
 fi
 
 BASH_BIN="$(command -v bash)"
-for cmd in monico-connect monico-cmd monico-model; do
+for cmd in monico-connect monico-cmd monico-model monico-usb; do
   cat > "$BIN_DIR/$cmd" <<EOF
 #!$BASH_BIN
 cd "$APP_DIR" && exec python3 "$APP_DIR/$cmd" "\$@"
@@ -126,5 +126,7 @@ echo "Done. Turn this phone into a server with:"
 echo "  monico-connect"
 echo "Run a command on the Linux box from here:"
 echo "  monico-cmd linux \"uname -a\""
+echo "See mounted USB drives on Linux:"
+echo "  monico-usb"
 echo "Optional, install the biggest uncensored model this phone can run:"
 echo "  monico-model install"
