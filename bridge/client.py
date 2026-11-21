@@ -670,6 +670,9 @@ def _prompt_server_url() -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
+USB_REVERSE_PORTS = (8767, 8765)
+
+
 def _local_usb_bridge_url() -> str | None:
     """ADb reverse makes the Linux bridge reachable on Android loopback.
 
@@ -678,7 +681,7 @@ def _local_usb_bridge_url() -> str | None:
     verify the service identity, and then redeem the SAME pairing code.
     This needs no Android internet, LAN IP, or router broadcast support.
     """
-    for port in (8767, 8765):
+    for port in USB_REVERSE_PORTS:
         url = f"http://127.0.0.1:{port}"
         try:
             opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
