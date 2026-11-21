@@ -50,7 +50,7 @@ from .apps import APPS, AppProbe
 from .common import (DATA_DIR, KEY_FILE, VERSION, blocked_reason,
                      check_token, ensure_data_dir, get_or_create_key,
                      get_or_create_server_id, log, model_status,
-                     run_command)
+                     run_command, save_json)
 from . import pools as poolmod
 from .ai_gateway import MODEL_ALIAS, AIGateway, GatewayError, openai_error
 from .hwdetect import detect
@@ -1791,6 +1791,9 @@ def serve(port: int, join_url: str | None = None, join_key: str | None = None,
     BRIDGE = Bridge(name=name)
     BRIDGE.port = port
     httpd = ThreadingHTTPServer(("0.0.0.0", port), make_handler())
+    # Remember the port only after a successful bind; separate terminals
+    # can then use monico-pair and monico-cmd without re-exporting it.
+    save_json(DATA_DIR / "server-port.json", {"port": port})
     print("=" * 60, flush=True)
     print(f"MONICO LABS BRIDGE server v{VERSION}", flush=True)
     print(f"Server:      {BRIDGE.name} ({BRIDGE.server_id})", flush=True)
