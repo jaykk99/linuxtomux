@@ -108,7 +108,10 @@ def main(argv: list[str]) -> int:
         print("To turn this off: monico-net off (and open a new shell).")
         return 0
     if command == "off":
-        FLAG_FILE.unlink(missing_ok=True)
+        try:
+            FLAG_FILE.unlink()
+        except FileNotFoundError:
+            pass
         print("Linux proxy sharing disabled for NEW Termux shells. "
               "Close/reopen this shell to clear the old proxy variables.")
         return 0
