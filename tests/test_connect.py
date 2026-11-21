@@ -368,7 +368,7 @@ def _copy_repo_checkout(tmp_path):
     shutil.copytree(REPO / "bridge", dest / "bridge")
     shutil.copytree(REPO / "ui", dest / "ui")
     for name in ("monico-connect", "monico-cmd", "monico-model",
-                 "monico-pair", "install-termux.sh", "install-linux.sh"):
+                 "monico-usb", "monico-pair", "install-termux.sh", "install-linux.sh"):
         shutil.copy2(REPO / name, dest / name)
     return dest
 
