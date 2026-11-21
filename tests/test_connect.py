@@ -111,7 +111,7 @@ def test_repo_tarball_has_everything_installer_needs():
     names = tarfile.open(fileobj=io.BytesIO(data)).getnames()
     for want in ("bridge/server.py", "bridge/client.py", "bridge/tunnel.py",
                  "bridge/specs.py", "ui/dashboard.html", "ui/homescreen.html",
-                 "monico-connect", "monico-cmd", "monico-model",
+                 "monico-connect", "monico-cmd", "monico-model", "monico-usb",
                  "install-termux.sh"):
         assert want in names, want
 
@@ -368,7 +368,7 @@ def _copy_repo_checkout(tmp_path):
     shutil.copytree(REPO / "bridge", dest / "bridge")
     shutil.copytree(REPO / "ui", dest / "ui")
     for name in ("monico-connect", "monico-cmd", "monico-model",
-                 "monico-pair", "install-termux.sh", "install-linux.sh"):
+                 "monico-usb", "monico-pair", "install-termux.sh", "install-linux.sh"):
         shutil.copy2(REPO / name, dest / name)
     return dest
 

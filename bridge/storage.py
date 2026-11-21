@@ -211,6 +211,24 @@ def detect_storage() -> list[dict]:
                                       _gb(u.total), _gb(u.free), "usb", True))
         except Exception:
             pass
+    # ChromeOS exposes user-approved USB shares as directories inside
+    # Crostini instead of /dev/sd* block devices. lsblk cannot see them,
+    # but they are real mounted volumes made visible to Linux.
+    chromeos_removable = Path("/mnt/chromeos/removable")
+    if chromeos_removable.is_dir():
+        try:
+            for volume in chromeos_removable.iterdir():
+                if not volume.is_dir() or volume.is_symlink():
+                    continue
+                try:
+                    usage = shutil.disk_usage(str(volume))
+                    usb_mounted.append(_entry(volume.name, str(volume),
+                                              _gb(usage.total), _gb(usage.free),
+                                              "usb", True))
+                except (OSError, PermissionError):
+                    continue
+        except (OSError, PermissionError):
+            pass
     devs = _lsblk()
     if devs is not None:
         m, un = _usb_rows_from_lsblk(devs)

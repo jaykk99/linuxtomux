@@ -186,6 +186,68 @@ def cmd_main(argv: list[str]) -> int:
     return int(res.get("exit_code", 0))
 
 
+
+def usb_main(argv: list[str]) -> int:
+    """List USB drives attached to Linux from Linux OR paired Termux.
+
+    This reads the authenticated bridge device registry rather than
+    assuming the Android OS can directly mount a drive plugged into
+    the Linux computer. It never mounts, formats, or writes USB files.
+    """
+    if argv and argv not in (["list"], ["--json"], ["list", "--json"]):
+        print("usage: monico-usb [list] [--json]", file=sys.stderr)
+        return 2
+    base, key = _bridge_endpoint()
+    try:
+        req = urllib.request.Request(base.rstrip("/") + "/api/devices",
+                                     headers={"X-Pair-Key": key})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            devices = json.loads(resp.read()).get("devices", [])
+    except (OSError, urllib.error.URLError, ValueError, KeyError) as exc:
+        print("Cannot read Linux USB drives through the bridge. "
+              "Start monico-server on Linux and pair Termux first. "
+              f"Details: {exc}", file=sys.stderr)
+        return 1
+    servers = [d for d in devices if d.get("kind") == "server"]
+    result = []
+    for d in servers:
+        specs = d.get("specs") or {}
+        hw = d.get("hw") or {}
+        drives = specs.get("storage") or hw.get("storage") or []
+        if not isinstance(drives, list):
+            drives = []
+        result.append({
+            "linux": d.get("name") or d.get("device_id") or "linux",
+            "online": bool(d.get("online")),
+            "usb": [x for x in drives if isinstance(x, dict)
+                    and x.get("kind") == "usb"],
+        })
+    if "--json" in argv:
+        print(json.dumps({"servers": result}, indent=2))
+        return 0
+    if not servers:
+        print("No Linux server connected. Pair your phone with monico-connect.")
+        return 1
+    found = 0
+    for server in result:
+        title = server["linux"] + ("" if server["online"] else " [offline]")
+        print(title + ":")
+        for drive in server["usb"]:
+            found += 1
+            label = drive.get("label") or "USB storage"
+            path = drive.get("path") or "(not mounted)"
+            status = "mounted" if drive.get("mounted") else "not mounted"
+            free = drive.get("free_gb")
+            capacity = f", {free} GB free" if isinstance(free, (int, float)) else ""
+            print(f"  {label}: {path} [{status}{capacity}]")
+        if not server["usb"]:
+            print("  No USB drive detected by this Linux server.")
+    if not found:
+        print("Plug a drive into Linux and wait up to 30 seconds; "
+              "unmounted drives may appear but cannot store files yet.")
+    return 0
+
+
 def model_main(argv: list[str]) -> int:
     if not argv or argv[0] not in ("install", "status"):
         print("usage: monico-model install [--dry-run] [--profile NAME] "

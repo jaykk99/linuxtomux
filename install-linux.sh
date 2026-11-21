@@ -12,8 +12,8 @@ if ! command -v python3 >/dev/null 2>&1 || ! python3 -c 'import sys; sys.exit(sy
 fi
 mkdir -p "$APP_DIR" "$BIN_DIR" "$HOME/.monico-bridge"
 cp -r "$SRC_DIR/bridge" "$SRC_DIR/ui" "$APP_DIR/"
-cp "$SRC_DIR"/monico-server "$SRC_DIR"/monico-cmd "$SRC_DIR"/monico-model "$SRC_DIR"/monico-connect "$SRC_DIR"/monico-pair "$SRC_DIR"/install-termux.sh "$APP_DIR/"
-for cmd in monico-server monico-cmd monico-model monico-pair monico-connect; do
+cp "$SRC_DIR"/monico-server "$SRC_DIR"/monico-cmd "$SRC_DIR"/monico-model "$SRC_DIR"/monico-connect "$SRC_DIR"/monico-pair "$SRC_DIR"/monico-usb "$SRC_DIR"/install-termux.sh "$APP_DIR/"
+for cmd in monico-server monico-cmd monico-model monico-pair monico-connect monico-usb; do
   cat > "$BIN_DIR/$cmd" <<EOF
 #!/usr/bin/env bash
 cd "$APP_DIR" && exec python3 "$APP_DIR/$cmd" "\$@"

@@ -1549,7 +1549,7 @@ def _pair_code_block(port: int, code: str) -> str:
 
 
 TARBALL_FILES = ("monico-connect", "monico-cmd", "monico-model",
-                 "install-termux.sh")
+                 "monico-usb", "install-termux.sh")
 _TARBALL_CACHE: dict = {"sig": None, "data": b""}
 _TARBALL_LOCK = threading.Lock()
 
@@ -1806,10 +1806,13 @@ def serve(port: int, join_url: str | None = None, join_key: str | None = None,
     lan = _lan_ip()
     if lan:
         print(f"LAN dashboard: http://{lan}:{port}/dashboard (same WiFi, no internet needed)", flush=True)
+        print(f"Termux direct pairing fallback: monico-connect --server http://{lan}:{port}", flush=True)
     else:
         print("No LAN address found: the phone can still find this server "
               "on the local network with the code below.", flush=True)
     print(_pair_code_block(port, _new_pair_code(key)), flush=True)
+    print("If Termux auto-discovery cannot find this server, use the direct pairing "
+          "command above. It uses the SAME 4-digit code.", flush=True)
     _start_discovery_listener(port)
     tunnel_proc = None
     if public:

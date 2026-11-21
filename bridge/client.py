@@ -693,8 +693,12 @@ def _pair_with_code(code: str) -> tuple[str, str, str]:
 def connect(server_url: str = "", key: str = "", name: str = "",
             code: str = "") -> int:
     saved = load_json(CLIENT_CONFIG)
+    explicit_code = (code or "").strip()
     server_url = server_url or os.environ.get("MONICO_SERVER", "") or saved.get("server_url", "")
-    key = key or os.environ.get("MONICO_TOKEN", "") or saved.get("key", "")
+    # A fresh code explicitly entered on the command line is a request
+    # to re-pair. Never silently keep using a stale saved credential.
+    key = key or os.environ.get("MONICO_TOKEN", "") or (
+        "" if explicit_code else saved.get("key", ""))
     server_id = saved.get("server_id", "")
     name = name or saved.get("name", "") or os.environ.get("MONICO_NAME", "") \
         or (detect().get("device_model") or "termux-device")
