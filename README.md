@@ -49,6 +49,31 @@ monico-connect
 Type the 4-digit code when it asks. Done. The phone stays connected
 and shows up on the dashboard.
 
+## Run alongside Agent Mail Service on one Linux machine
+
+Agent Mail's **local phone dashboard** uses TCP **8765**, while its local
+mail MCP uses **8787**. Start Lin-2-Mux on **8767** to avoid the collision:
+
+```sh
+# Agent Mail (in its own checkout):
+bash start.sh --full up --install
+# In a separate terminal, Lin-2-Mux (after install-linux.sh):
+monico-server start --port 8767
+```
+
+The bridge records its successfully bound port in
+`~/.monico-bridge/server-port.json`. In any later Linux terminal,
+`monico-pair` and `monico-cmd linux 'uname -a'` automatically use that
+port, even when MONICO_PORT was not exported. `MONICO_PORT=...` and
+`--port ...` remain explicit overrides. The phone's `monico-connect`
+discovers the bridge by its pairing code on a normal LAN; on Chromebook
+Linux / isolated containers use `--public` and specify the published
+URL with `monico-connect --server URL`.
+
+This setup cohosts **local** services. It does not certify public SMTP
+deliverability, internet-facing security, or real Android/Termux pairing.
+Do not expose the command-execution API to untrusted networks.
+
 ## Path B: Chromebook or phone elsewhere
 
 Step 1, on Linux. Same as Path A, but start with `--public`. The server
