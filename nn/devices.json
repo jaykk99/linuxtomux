@@ -1,0 +1,81 @@
+[
+  {
+    "device": "android-8gb",
+    "source": "bridge/hwdetect.py PROFILES (repo dry-run profile)",
+    "platform": "android-termux",
+    "device_model": "Android phone (8 GB)",
+    "arch": "aarch64",
+    "cpu_cores": 8,
+    "ram_total_gb": 8.0,
+    "ram_available_gb": 0,
+    "disk_free_gb": 64.0,
+    "gpu": "mobile GPU (no local LLM GPU path, CPU inference)",
+    "hostname": "android-8gb (profile)"
+  },
+  {
+    "device": "linux-vm-8gb",
+    "source": "bridge/hwdetect.py PROFILES (repo dry-run profile)",
+    "platform": "linux",
+    "device_model": "",
+    "arch": "x86_64",
+    "cpu_cores": 4,
+    "ram_total_gb": 8.0,
+    "ram_available_gb": 6.5,
+    "disk_free_gb": 62.0,
+    "gpu": "none detected (CPU inference)",
+    "hostname": "linux-vm (profile)"
+  },
+  {
+    "device": "linux-box-32gb",
+    "source": "bridge/hwdetect.py PROFILES (repo dry-run profile)",
+    "platform": "linux",
+    "device_model": "",
+    "arch": "x86_64",
+    "cpu_cores": 16,
+    "ram_total_gb": 32.0,
+    "ram_available_gb": 29.0,
+    "disk_free_gb": 900.0,
+    "gpu": "none detected (CPU inference)",
+    "hostname": "linux-box (profile)"
+  },
+  {
+    "device": "linux-box-64gb",
+    "source": "bridge/hwdetect.py PROFILES (repo dry-run profile)",
+    "platform": "linux",
+    "device_model": "",
+    "arch": "x86_64",
+    "cpu_cores": 24,
+    "ram_total_gb": 64.0,
+    "ram_available_gb": 58.0,
+    "disk_free_gb": 1800.0,
+    "gpu": "none detected (CPU inference)",
+    "hostname": "linux-box-64 (profile)"
+  },
+  {
+    "device": "mesh-tiny",
+    "source": "tests/test_mesh.py FAKE_HW (repo mesh-test fixture)",
+    "platform": "linux",
+    "device_model": "",
+    "arch": "x86_64",
+    "cpu_cores": 2,
+    "ram_total_gb": 4.0,
+    "ram_available_gb": 2.0,
+    "disk_free_gb": 10.0,
+    "gpu": "none",
+    "hostname": "x"
+  },
+  {
+    "device": "live-vm",
+    "source": "bridge.hwdetect.detect() on this VM, snapshot (RAM varies, so the values are frozen here)",
+    "measured_at": "2026-11-14T05:58:01.574575+00:00",
+    "platform": "linux",
+    "device_model": "",
+    "arch": "x86_64",
+    "cpu_cores": 4,
+    "ram_total_gb": 7.75,
+    "ram_available_gb": 2.06,
+    "disk_free_gb": 44.1,
+    "gpu": "none detected (CPU inference)",
+    "hostname": "htch-runtime"
+  }
+]
